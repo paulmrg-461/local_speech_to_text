@@ -1,0 +1,31 @@
+[project]
+name = "local-speech-to-text"
+version = "0.1.0"
+description = "Dictado local en Linux con RTX 5070: Win+F para transcribir y copiar al portapapeles"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "DevPaul" }]
+keywords = ["speech-to-text", "whisper", "stt", "cuda", "wayland"]
+dependencies = [
+    "faster-whisper>=1.0.0",
+    "sounddevice>=0.4.6",
+    "soundfile>=0.12.1",
+    "numpy>=1.24",
+    "pyperclip>=1.8",
+]
+
+[project.optional-dependencies]
+cuda = [
+    # Para RTX 5070 (Blackwell) asegura CUDA 12.8+. faster-whisper ya trae ctranslate2 con CUDA
+]
+
+[project.scripts]
+local-stt = "local_speech_to_text.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.ruff]
+line-length = 100
