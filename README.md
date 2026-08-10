@@ -17,8 +17,10 @@ cd ~/Documents/dev_projects/DevPaul/local_speech_to_text
 chmod +x scripts/install.sh scripts/setup-hotkey.sh
 ./scripts/install.sh
 
-# 3. Configurar atajo Win+F (GNOME Wayland)
-./scripts/setup-hotkey.sh
+# 3. Configurar atajo Win+F (KDE Plasma 6 por defecto; GNOME con variable)
+./scripts/setup-hotkey.sh                          # KDE Plasma 6: Meta+F
+# GNOME: LOCAL_STT_DESKTOP=gnome ./scripts/setup-hotkey.sh
+# Auto-detectar: LOCAL_STT_DESKTOP=auto ./scripts/setup-hotkey.sh
 
 # 4. Iniciar daemon (elige uno)
 .venv/bin/local-stt daemon              # foreground, para probar
@@ -43,10 +45,16 @@ systemctl --user enable --now local-stt
 
 ### Atajo manual (si el script no te lo configuró)
 
-GNOME: **Configuración → Teclado → Atajos personalizados → +**
+**KDE Plasma 6 (default):** **Ajustes del sistema → Atajos → Atajos personalizados → Añadir → Orden/URL**
+- Nombre: `Local STT`
+- Orden: `/ruta/completa/.venv/bin/local-stt toggle`
+- Activador: `Meta+F` (Win+F)
+
+**GNOME:** **Configuración → Teclado → Atajos personalizados → +**
 - Nombre: `Local STT`
 - Comando: `/ruta/completa/.venv/bin/local-stt toggle`
 - Atajo: `Super+F`
+- O automático: `LOCAL_STT_DESKTOP=gnome ./scripts/setup-hotkey.sh`
 
 KDE: **Preferencias → Atajos → Añadir comando** → mismo comando → `Meta+F`
 
