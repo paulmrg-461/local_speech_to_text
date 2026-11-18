@@ -40,6 +40,8 @@ _ENV_MAP = {
     "silence_rms": "LOCAL_STT_SILENCE_RMS",
     "silence_threshold_ms": "LOCAL_STT_SILENCE_MS",
     "vad_filter": "LOCAL_STT_VAD",
+    "vocabulary_file": "LOCAL_STT_VOCAB",
+    "corrections_file": "LOCAL_STT_CORRECTIONS",
 }
 
 _DEFAULTS = {
@@ -58,6 +60,16 @@ _DEFAULTS = {
     "vad_filter": True,  # VAD de faster-whisper (filtra silencios antes de transcribir)
     "auto_copy": True,
 }
+
+# Paths por defecto de vocabulario/correcciones (XDG)
+def _default_vocab_path() -> Path:
+    base = os.environ.get("XDG_CONFIG_HOME", "~/.config")
+    return Path(base).expanduser() / "local-stt" / "vocabulary.txt"
+
+
+def _default_corrections_path() -> Path:
+    base = os.environ.get("XDG_CONFIG_HOME", "~/.config")
+    return Path(base).expanduser() / "local-stt" / "corrections.txt"
 
 # Claves aceptadas en el TOML (todo lo demás se ignora)
 _TOML_KEYS = set(_ENV_MAP) | {"sample_rate", "auto_copy"}
@@ -81,6 +93,8 @@ class Config:
     silence_rms: float = 0.008
     silence_threshold_ms: int = 1500
     vad_filter: bool = True
+    vocabulary_file: Path = _default_vocab_path()
+    corrections_file: Path = _default_corrections_path()
     socket_path: Path = Path(os.environ.get("LOCAL_STT_SOCKET", "/tmp/local-stt.sock"))
     pid_path: Path = Path(os.environ.get("LOCAL_STT_PID", "/tmp/local-stt.pid"))
     history_path: Path = default_history_path()
@@ -95,6 +109,10 @@ class Config:
             data.update({k: v for k, v in tomllib.loads(cfg_file.read_text()).items() if k in _TOML_KEYS})
         _apply_env(data)
         data.update({k: v for k, v in overrides.items() if v is not None})
+        # Paths desde TOML llegan como str: normalizar
+        for key in ("vocabulary_file", "corrections_file"):
+            if key in data and data[key] is not None:
+                data[key] = Path(data[key]).expanduser()
         return cls(**{k: v for k, v in data.items() if k in {f.name for f in fields(cls)}})
 
 
@@ -109,5 +127,7 @@ def _apply_env(data: dict) -> None:
             data[key] = int(raw)
         elif key == "silence_rms":
             data[key] = float(raw)
+        elif key in ("vocabulary_file", "corrections_file"):
+            data[key] = Path(raw).expanduser()
         else:  # bools
             data[key] = raw.lower() in ("1", "true", "yes", "on")

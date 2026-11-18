@@ -133,6 +133,42 @@ def cmd_download(args):
         sys.exit(1)
 
 
+def cmd_vocab(args):
+    """Gestiona el vocabulario (initial_prompt de Whisper): list / add / remove."""
+    from .vocab import load_vocabulary
+
+    cfg = _config_from_args(args)
+    path = cfg.vocabulary_file
+    terms = [t for t in load_vocabulary(path).split(", ") if t] if path.exists() else []
+    if args.action == "add":
+        for t in args.terms:
+            if t not in terms:
+                terms.append(t)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("\n".join(terms) + "\n")
+        print(f"✅ Vocabulario guardado ({len(terms)} términos): {path}")
+    elif args.action == "remove":
+        terms = [t for t in terms if t not in args.terms]
+        path.write_text("\n".join(terms) + "\n" if terms else "")
+        print(f"✅ Vocabulario guardado ({len(terms)} términos): {path}")
+    else:
+        if not terms:
+            print(f"Vocabulario vacío. Añade con: local-stt vocab add 'DevPaul' 'FastAPI'")
+        else:
+            print(f"Vocabulario ({len(terms)}) → {path}")
+            print("  " + "\n  ".join(terms))
+
+
+def cmd_correct(args):
+    """Añade una corrección: `local-stt correct 'de esto' 'a esto'`."""
+    cfg = _config_from_args(args)
+    path = cfg.corrections_file
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "a") as f:
+        f.write(f"{args.wrong} -> {args.right}\n")
+    print(f"✅ Corrección guardada: '{args.wrong}' → '{args.right}' en {path}")
+
+
 def _check(ok: bool, label: str, ok_msg: str, err: str, warn: bool = False) -> bool:
     icon = "✅" if ok else ("⚠️ " if warn else "❌")
     print(f"{icon} {label}: {ok_msg if ok else err}")
@@ -206,6 +242,15 @@ def cmd_doctor(args):
     ):
         failures += not _check(shutil.which(tool) is not None, tool, purpose,
                                f"Falta. Instala: sudo pacman -S {pkg}", warn=tool != "wl-copy")
+
+    # 5b. Vocabulario y correcciones
+    from .vocab import load_corrections, load_vocabulary
+
+    n_vocab = len([t for t in load_vocabulary(cfg.vocabulary_file).split(", ") if t])
+    n_corr = len(load_corrections(cfg.corrections_file))
+    _check(True, "Vocabulario", f"{n_vocab} términos en {cfg.vocabulary_file}",
+           "")  # siempre OK: es opcional
+    _check(True, "Correcciones", f"{n_corr} reglas en {cfg.corrections_file}", "")
 
     # 6. Atajo
     hotkey = (Path.home() / ".config" / "khotkeysrc")
@@ -292,6 +337,16 @@ def main():
 
     doc = sub.add_parser("doctor", help="Diagnóstico completo: GPU, daemon, atajo, micro...")
     doc.set_defaults(func=cmd_doctor)
+
+    v = sub.add_parser("vocab", help="Vocabulario para Whisper (nombres/términos propios)")
+    v.add_argument("action", nargs="?", default="list", choices=["list", "add", "remove"])
+    v.add_argument("terms", nargs="*", help="Términos (add/remove)")
+    v.set_defaults(func=cmd_vocab)
+
+    c = sub.add_parser("correct", help="Añade corrección: local-stt correct 'mal' 'bien'")
+    c.add_argument("wrong", help="Texto que sale mal")
+    c.add_argument("right", help="Texto correcto")
+    c.set_defaults(func=cmd_correct)
 
     f = sub.add_parser("transcribe", help="Transcribe un archivo de audio")
     f.add_argument("file", help="Ruta a wav/mp3/flac")

@@ -17,11 +17,13 @@ class Transcriber:
         language: str | None = "es",
         beam_size: int = 5,
         vad_filter: bool = True,
+        initial_prompt: str | None = None,
     ):
         self.model_name = model
         self.language = language
         self.beam_size = beam_size
         self.vad_filter = vad_filter
+        self.initial_prompt = initial_prompt
         self.device = device
         self.compute_type = compute_type
         self._model = None
@@ -77,6 +79,7 @@ class Transcriber:
             vad_filter=self.vad_filter,
             vad_parameters=dict(min_silence_duration_ms=500),
             condition_on_previous_text=False,
+            initial_prompt=self.initial_prompt,
         )
         text_parts = []
         for seg in segments:

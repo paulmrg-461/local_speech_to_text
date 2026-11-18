@@ -17,6 +17,7 @@ from .config import Config
 from .recorder import AudioRecorder
 from .text_cleaner import clean_text
 from .transcriber import Transcriber
+from .vocab import apply_corrections, load_corrections, load_vocabulary
 
 
 class Daemon:
@@ -28,6 +29,7 @@ class Daemon:
             sample_rate=self.config.sample_rate, silence_rms=self.config.silence_rms
         )
         self.transcriber: Transcriber | None = None
+        self.corrections: list[tuple[str, str]] = []
         self._lock = threading.Lock()
         self._sock_path = self.config.socket_path
         self._running = False
@@ -37,6 +39,12 @@ class Daemon:
         if self.transcriber is None:
             print("[daemon] Cargando modelo en VRAM... (primera vez tarda ~10-20s)")
             notify("Local STT", "Cargando modelo en GPU... primera vez puede tardar")
+            vocab = load_vocabulary(self.config.vocabulary_file)
+            self.corrections = load_corrections(self.config.corrections_file)
+            if vocab:
+                print(f"[daemon] Vocabulario activo ({len(vocab.split(', '))} términos)")
+            if self.corrections:
+                print(f"[daemon] Correcciones activas ({len(self.corrections)})")
             self.transcriber = Transcriber(
                 model=self.config.model,
                 device=self.config.device,
@@ -44,6 +52,7 @@ class Daemon:
                 language=self.config.language,
                 beam_size=self.config.beam_size,
                 vad_filter=self.config.vad_filter,
+                initial_prompt=vocab or None,
             )
             notify("Local STT", f"Modelo {self.config.model} listo en {self.config.device}")
 
@@ -99,6 +108,8 @@ class Daemon:
         t0 = time.time()
         raw = self.transcriber.transcribe(recording.samples, recording.sample_rate) if self.transcriber else ""
         text = clean_text(raw) if self.config.dictation_commands else raw
+        if self.corrections:
+            text = apply_corrections(text, self.corrections)
         print(f"[daemon] Transcrito en {time.time() - t0:.2f}s")
 
         if not text.strip():
