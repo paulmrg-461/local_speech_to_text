@@ -454,6 +454,15 @@ def cmd_uninstall(args):
     print("✅ Desinstalado." + ("" if args.purge else " Usa --purge además para borrar config/historial/.venv."))
 
 
+def cmd_stats(args):
+    """Estadísticas de uso: dictados, palabras, tiempo y histograma."""
+    from .stats import compute_stats, load_entries, render_stats
+
+    cfg = _config_from_args(args)
+    entries = load_entries(cfg.history_path)
+    print(render_stats(compute_stats(entries, days=args.days)))
+
+
 def cmd_config(args):
     """TUI interactivo para ~/.config/local-stt/config.toml (sin TTY: solo muestra)."""
     from .config_tui import run_tui
@@ -696,6 +705,10 @@ def main():
     un.add_argument("--yes", action="store_true", help="Confirmar sin prompt")
     un.add_argument("--purge", action="store_true", help="Borrar config, historial y .venv")
     un.set_defaults(func=cmd_uninstall)
+
+    stat = sub.add_parser("stats", help="Uso: dictados, palabras, tiempo, histograma")
+    stat.add_argument("--days", type=int, default=14, help="Días del histograma (default 14)")
+    stat.set_defaults(func=cmd_stats)
 
     f = sub.add_parser("transcribe", help="Transcribe un archivo de audio")
     f.add_argument("file", help="Ruta a wav/mp3/flac")

@@ -283,7 +283,6 @@ class Daemon:
         t0 = time.time()
         raw = self._final_transcription(recording)
         text = clean_text(raw) if self.config.dictation_commands else raw
-        text = clean_text(raw) if self.config.dictation_commands else raw
         if self.corrections:
             text = apply_corrections(text, self.corrections)
         if getattr(self.config, "numbers_to_digits", False):
@@ -296,6 +295,7 @@ class Daemon:
             return
 
         self._save_history(text)
+        self._save_history(text, duration)
         print(f"[daemon] ✅ Texto: {text}")
         ok = copy_to_clipboard(text)
         if ok:
@@ -329,16 +329,20 @@ class Daemon:
             tail_text = self.transcriber.transcribe(tail, recording.sample_rate)
         return (self._stream_text + " " + tail_text).strip()
 
-    def _save_history(self, text: str) -> None:
+    def _save_history(self, text: str, duration: float | None = None) -> None:
         """Añade al historial JSONL (máx. 100 entradas, la última al final)."""
         try:
             path: Path = self.config.history_path
             path.parent.mkdir(parents=True, exist_ok=True)
-            entry = json.dumps({"ts": datetime.now().isoformat(timespec="seconds"), "text": text}, ensure_ascii=False)
+            entry = {
+                "ts": datetime.now().isoformat(timespec="seconds"),
+                "text": text,
+                "duration": round(duration, 1) if duration else None,
+            }
             lines = []
             if path.exists():
                 lines = [ln for ln in path.read_text().splitlines() if ln.strip()]
-            lines.append(entry)
+            lines.append(json.dumps(entry, ensure_ascii=False))
             path.write_text("\n".join(lines[-100:]) + "\n")
         except Exception as e:
             print(f"[daemon] historial no guardado: {e}")
