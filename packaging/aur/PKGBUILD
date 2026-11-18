@@ -36,7 +36,7 @@ source=(
 )
 noextract=("nvidia_cublas_cu12-12.6.4.1-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl")
 sha256sums=(
-  'SKIP'  # TODO(tag v0.1.0): rellenar tras publicar el release (makepkg -g)
+  '8e0423897b31db333bdeea668d3cb31b9fc4757b63fd149e08843b7dcdbf7620'
   '08ed2686e9875d01b58e3cb379c6896df8e76c75e0d4a7f7dace3d7b6d9ef8eb'
 )
 
