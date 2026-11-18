@@ -28,7 +28,9 @@ class Daemon:
     def __init__(self, config: Config | None = None):
         self.config = config or Config()
         self.recorder = AudioRecorder(
-            sample_rate=self.config.sample_rate, silence_rms=self.config.silence_rms
+            sample_rate=self.config.sample_rate,
+            silence_rms=self.config.silence_rms,
+            mic=getattr(self.config, "mic", None),
         )
         self.transcriber: Transcriber | None = None
         self.corrections: list[tuple[str, str]] = []
@@ -349,6 +351,7 @@ class Daemon:
         self.config = new
         # aplicar live-settings al recorder
         self.recorder.silence_rms = new.silence_rms
+        self.recorder.mic = new.mic
         if changed:
             print(f"[daemon] Config cambió {changed}: se recargará el modelo en el próximo dictado")
             self.transcriber = None  # descarga VRAM; se recarga lazy en el próximo toggle

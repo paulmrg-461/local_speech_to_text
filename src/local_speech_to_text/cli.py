@@ -571,8 +571,17 @@ def cmd_doctor(args):
     try:
         devs = AudioRecorder.list_devices()
         has_input = any(d["max_input_channels"] > 0 for d in devs)
-        failures += not _check(has_input, "Micrófono", "dispositivo de entrada detectado",
-                               "No se detectó micro de entrada (revisa pavucontrol)", warn=False)
+        _check(has_input, "Micrófono", "dispositivo de entrada detectado",
+               "No se detectó micro de entrada (revisa pavucontrol)", warn=False)
+        if cfg.mic:
+            r = AudioRecorder(mic=cfg.mic)
+            idx = r.resolve_mic()
+            failures += not _check(idx is not None, f"Mic '{cfg.mic}'",
+                                   f"índice {idx}" if idx is not None else "",
+                                   "No matchea ningún dispositivo de entrada; se usará el default del sistema", warn=True)
+        else:
+            _check(True, "Mic", "config.mic vacío: se usa el default del sistema "
+                   "(elige uno fijo con local-stt config)", "")
     except Exception as e:
         failures += not _check(False, "Micrófono", "", f"error: {e}")
 

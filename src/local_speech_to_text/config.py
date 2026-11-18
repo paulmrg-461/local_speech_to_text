@@ -51,6 +51,7 @@ _ENV_MAP = {
     "numbers_to_digits": "LOCAL_STT_NUMBERS",
     "streaming": "LOCAL_STT_STREAMING",
     "stream_window": "LOCAL_STT_STREAM_WINDOW",
+    "mic": "LOCAL_STT_MIC",
 }
 
 _DEFAULTS = {
@@ -76,6 +77,7 @@ _DEFAULTS = {
     "numbers_to_digits": False,  # true: "tres coma catorce" -> 3,14 (opinional, ver README)
     "streaming": True,  # dictados largos: confirma ventanas y solo transcribe la cola
     "stream_window": 12.0,  # segundos por ventana confirmada
+    "mic": None,  # nombre del micro (substring); None = default del sistema
     "auto_copy": True,
 }
 
@@ -126,6 +128,7 @@ class Config:
     numbers_to_digits: bool = False
     streaming: bool = True  # dictados largos: confirma ventanas, al parar solo transcribe la cola
     stream_window: float = 12.0
+    mic: str | None = None  # substring del nombre del micro; None = default
     # {regex de ventana: archivo de vocabulario} — vocabulario contextual por app
     app_vocab: dict[str, str] = field(default_factory=dict)
     vocabulary_file: Path = _default_vocab_path()
@@ -151,12 +154,16 @@ class Config:
         return cls(**{k: v for k, v in data.items() if k in {f.name for f in fields(cls)}})
 
 
+# Claves de texto plano (evita que caigan en la rama bool del parser de env)
+_STR_KEYS = {"language", "model", "device", "compute_type", "mic", "wake_word_model"}
+
+
 def _apply_env(data: dict) -> None:
     for key, env in _ENV_MAP.items():
         if env not in os.environ:
             continue
         raw = os.environ[env]
-        if key in ("language", "model", "device", "compute_type"):
+        if key in _STR_KEYS:
             data[key] = None if key == "language" and raw == "auto" else raw
         elif key in ("beam_size", "max_record_seconds", "silence_threshold_ms"):
             data[key] = int(raw)

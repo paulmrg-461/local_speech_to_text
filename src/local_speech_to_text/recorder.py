@@ -23,12 +23,19 @@ class Recording:
 class AudioRecorder:
     """Grabación con sounddevice. Soporta toggle y VAD simple por energía."""
 
-    def __init__(self, sample_rate: int = 16000, channels: int = 1, silence_rms: float = 0.008):
+    def __init__(
+        self,
+        sample_rate: int = 16000,
+        channels: int = 1,
+        silence_rms: float = 0.008,
+        mic: str | None = None,
+    ):
         if sd is None:
             raise RuntimeError("Falta 'sounddevice'. Instala con: pip install sounddevice soundfile")
         self.sample_rate = sample_rate
         self.channels = channels
         self.silence_rms = silence_rms
+        self.mic = mic  # nombre (substring) o None = default del sistema
         self._queue: queue.Queue[np.ndarray] = queue.Queue()
         self._recording = False
         self._stream: sd.InputStream | None = None
@@ -44,6 +51,25 @@ class AudioRecorder:
             print(f"[recorder] status: {status}")
         self._queue.put(indata.copy())
 
+    def resolve_mic(self) -> int | None:
+        """Traduce config.mic (substring del nombre) a índice de sounddevice.
+
+        None/'' = default del sistema. Si no matchea, avisa y usa el default.
+        """
+        if not self.mic or sd is None:
+            return None
+        want = str(self.mic).lower()
+        try:
+            devs = sd.query_devices()
+        except Exception:
+            return None
+        for idx, dev in enumerate(devs):
+            name = str(dev["name"]) if isinstance(dev, dict) and "name" in dev else str(dev)
+            if want in name.lower() and (isinstance(dev, dict) and dev.get("max_input_channels", 1) > 0):
+                return idx
+        print(f"[recorder] mic '{self.mic}' no encontrado; usando el default del sistema")
+        return None
+
     def start(self) -> None:
         if self._recording:
             return
@@ -57,6 +83,7 @@ class AudioRecorder:
             channels=self.channels,
             dtype="float32",
             callback=self._callback,
+            device=self.resolve_mic(),
         )
         self._stream.start()
 
