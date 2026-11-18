@@ -147,6 +147,8 @@ sudo pacman -S --needed wtype        # sends Ctrl+V on KDE/GNOME Wayland
 | `local-stt setup` | One-command onboarding: system deps, model, hotkeys, service, doctor + cheat sheet |
 | `local-stt update` | Self-update: git pull → pip install → tests → daemon restart |
 | `local-stt uninstall [--yes] [--purge]` | Remove service + hotkeys (add `--purge` for config/history/.venv) |
+| `local-stt stats` | Usage stats: dictations, words, minutes dictated, 14-day histogram |
+| `local-stt bench [file]` | Compare models on your GPU with your own audio (records from mic if no file) |
 | `local-stt transcribe audio.wav --copy` | One-off transcription of an audio file |
 
 Logs (useful for debugging): `journalctl --user -u local-stt -f`
@@ -236,6 +238,7 @@ Edit `~/.config/local-stt/config.toml` (created by the installer) and run `local
 Prefer not to edit files by hand? `local-stt config` opens an interactive menu (model, language, toggles, wake word…) — press Enter to keep each value, and it never rewrites the file unless something actually changed. Without a TTY it just prints the effective config.
 
 ```toml
+mic = "FaceCam"           # pin a microphone by (sub)string name; omit = system default
 model = "large-v3-turbo"   # tiny, base, small, medium, large-v3, distil-large-v3
 language = "es"            # "auto" for autodetection
 device = "cuda"            # or "cpu"
@@ -337,7 +340,6 @@ Not implemented yet — documented so expectations are clear:
 | **CI (GitHub Actions)** | ❌ not set up | 71 local tests exist (`pytest tests/`) but nothing runs them on push. Next natural step. |
 | **AUR / PKGBUILD** | ❌ | Installation is currently clone + `install.sh`. A `local-stt` package would remove the venv from your home. |
 | **Push-to-talk (hold key)** | ❌ | Only toggle mode exists (press to start, press to stop). Hold-to-talk needs a long-running listener process per desktop shell. |
-| **Explicit microphone selection** | ❌ partial | The recorder uses the system default; switching defaults (e.g. headset vs webcam) means changing it in `pavucontrol`. A `mic = "device name"` config option is the natural next feature. |
 | **Custom Spanish wake word** | ❌ | openWakeWord ships English-trained models ("hey jarvis", "alexa"…). A custom "oye computadora" requires training a model (synthetic TTS data + fine-tune). |
 | **Wayland-native OSD** | partial | The floating indicator runs via XWayland (`DISPLAY`). Works, but a native layer-shell client (Qt/GTK) would survive XWayland-less sessions. |
 | **Exact window detection on KDE** | partial | Requires `kdotool` (AUR). The built-in KWin DBus fallback works but is best-effort and slower (see *Contextual vocabulary*). |

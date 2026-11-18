@@ -454,6 +454,46 @@ def cmd_uninstall(args):
     print("✅ Desinstalado." + ("" if args.purge else " Usa --purge además para borrar config/historial/.venv."))
 
 
+def cmd_bench(args):
+    """Compara modelos en tu GPU con un clip real (archivo o grabación)."""
+    import numpy as np
+
+    from .bench import bench_model, render_table
+
+    cfg = _config_from_args(args)
+    if args.file:
+        import soundfile as sf
+
+        audio, sr = sf.read(args.file, dtype="float32", always_2d=False)
+        if audio.ndim > 1:
+            audio = audio.mean(axis=1)
+    else:
+        print(f"Grabando {args.seconds}s de tu micro para el benchmark... habla ahora")
+        rec = AudioRecorder(sample_rate=cfg.sample_rate, mic=cfg.mic)
+        rec.start()
+        time.sleep(args.seconds)
+        audio = rec.stop().samples
+        sr = cfg.sample_rate
+    if audio.size < cfg.sample_rate:
+        print("❌ Clip demasiado corto (mínimo 1s).")
+        sys.exit(1)
+
+    models = args.models or ["small", "medium", "large-v3-turbo"]
+    print(f"\nBenchmark sobre {audio.size / sr:.1f}s de audio ({cfg.device}, {cfg.compute_type}).")
+    print("AVISO: los modelos no cacheados se descargan (~0.5-3GB cada uno).\n")
+    rows = []
+    for m in models:
+        print(f"→ {m}...")
+        try:
+            rows.append(bench_model(m, audio, sr, cfg.device, cfg.compute_type, cfg.language))
+        except Exception as e:
+            print(f"   ⚠️ {m} falló: {e}")
+    if not rows:
+        print("❌ Ningún modelo completó el benchmark.")
+        sys.exit(1)
+    print("\n" + render_table(rows, current=cfg.model))
+
+
 def cmd_stats(args):
     """Estadísticas de uso: dictados, palabras, tiempo y histograma."""
     from .stats import compute_stats, load_entries, render_stats
@@ -709,6 +749,12 @@ def main():
     stat = sub.add_parser("stats", help="Uso: dictados, palabras, tiempo, histograma")
     stat.add_argument("--days", type=int, default=14, help="Días del histograma (default 14)")
     stat.set_defaults(func=cmd_stats)
+
+    bn = sub.add_parser("bench", help="Benchmark de modelos en tu GPU (clip tuyo)")
+    bn.add_argument("file", nargs="?", help="Audio wav/mp3; si falta, graba del micro")
+    bn.add_argument("--seconds", type=float, default=6, help="Segundos a grabar si no hay archivo")
+    bn.add_argument("--models", nargs="+", help="Modelos a comparar (default: small medium large-v3-turbo)")
+    bn.set_defaults(func=cmd_bench)
 
     f = sub.add_parser("transcribe", help="Transcribe un archivo de audio")
     f.add_argument("file", help="Ruta a wav/mp3/flac")
