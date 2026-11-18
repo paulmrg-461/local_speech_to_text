@@ -145,6 +145,8 @@ sudo pacman -S --needed wtype        # sends Ctrl+V on KDE/GNOME Wayland
 | `local-stt translate` | Toggle translation mode: dictate in your language, output in English |
 | `local-stt doctor` | Full diagnosis: GPU, CUDA, cuBLAS, daemon, model, hotkey, clipboard tools, mic |
 | `local-stt setup` | One-command onboarding: system deps, model, hotkeys, service, doctor + cheat sheet |
+| `local-stt update` | Self-update: git pull → pip install → tests → daemon restart |
+| `local-stt uninstall [--yes] [--purge]` | Remove service + hotkeys (add `--purge` for config/history/.venv) |
 | `local-stt transcribe audio.wav --copy` | One-off transcription of an audio file |
 
 Logs (useful for debugging): `journalctl --user -u local-stt -f`
@@ -350,12 +352,8 @@ re-processed.
 ## Uninstall
 
 ```bash
-systemctl --user disable --now local-stt
-rm -f  ~/.config/systemd/user/local-stt.service && systemctl --user daemon-reload
-gsettings set org.gnome.settings-daemon.plugins.media-keys custom-keybindings "[]"   # GNOME only
-rm -rf .venv
-# optional: your data
-rm -rf ~/.config/local-stt ~/.local/share/local-stt ~/.local/state/local-stt
+.venv/bin/local-stt uninstall --yes --purge   # servicio + atajos + config + historial + .venv
+# sin --purge: conserva tus datos por si vuelves
 ```
 
 ## Development
