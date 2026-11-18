@@ -23,6 +23,80 @@
 
 ---
 
+## Quick start (everything in one command)
+
+```bash
+cd ~/Documents/dev_projects/DevPaul/local_speech_to_text
+chmod +x scripts/*.sh
+./scripts/install.sh          # 1. venv + Python deps + config + systemd unit + model download
+.venv/bin/local-stt setup     # 2. system deps, hotkeys, service start, doctor, cheat sheet
+```
+
+`local-stt setup` is idempotent — run it as many times as you want; it only
+fixes what's missing and ends with `local-stt doctor` plus a cheat sheet of
+every interaction.
+
+If anything is still red after setup, check
+[Post-install actions](#post-install-actions) below — the usual two are a
+**reboot** (if you recently updated the NVIDIA driver) and a **session
+re-login on KDE** (Plasma doesn't hot-reload custom shortcuts).
+
+## Detailed installation
+
+`install.sh` does all of the following:
+1. Installs system dependencies (Arch; safe to re-run).
+2. Creates `.venv` and installs the package with `pip install -e .` (this includes `nvidia-cublas-cu12` for the CUDA 12/13 fix below).
+3. Writes an editable config to `~/.config/local-stt/config.toml` (only if it doesn't already exist).
+4. Installs the systemd user service `local-stt.service`.
+5. **Pre-downloads the model** (~1.5GB, one time) so your first real dictation is instant.
+
+`local-stt setup` then:
+1. Checks the optional system tools (`wl-clipboard`, `wtype`, `wofi`…) and prints one `pacman` command with everything you're missing.
+2. Ensures the model is downloaded.
+3. Registers both hotkeys (`Win+F` dictation, `Win+Shift+F` history picker) — auto-detects KDE/GNOME.
+4. Enables and starts the daemon service.
+5. Runs `local-stt doctor` and prints the interaction cheat sheet.
+
+Manual equivalent, if you prefer each step by hand:
+
+```bash
+./scripts/setup-hotkey.sh                 # KDE Plasma 6 by default
+# GNOME:  LOCAL_STT_DESKTOP=gnome ./scripts/setup-hotkey.sh
+# Auto:   LOCAL_STT_DESKTOP=auto ./scripts/setup-hotkey.sh
+systemctl --user enable --now local-stt
+.venv/bin/local-stt doctor
+```
+
+**You're done.** Press `Super+F` (the Windows key + F), speak, press `Super+F`
+again. A notification confirms the text is in your clipboard; it is also
+auto-pasted with `Ctrl+V` where your cursor was.
+
+## Post-install actions (only if `doctor` shows something red)
+
+| Symptom | Action | Why |
+|---|---|---|
+| `nvidia-smi` fails with *Driver/library version mismatch* | **Reboot** | You updated `nvidia-utils` without restarting; the running kernel still has the old module. CUDA may keep working meanwhile, but fix it properly. |
+| New hotkeys (`Win+Shift+F`) don't fire on KDE | **Log out / log in** | Plasma 6 doesn't hot-reload `khotkeysrc`. After re-login they appear in *System Settings → Shortcuts → Custom Shortcuts*. |
+| `doctor` warns about `kdotool` | Optional: `yay -S kdotool` | Exact focused-window detection for per-app vocabulary. Without it the KWin fallback is used (slower, best-effort). |
+| You want hands-free | `pip install 'local-speech-to-text[wakeword]'` + `local-stt config` → `wake_word = true` | Adds the "hey jarvis" monitor (CPU). |
+
+## Interaction cheat sheet
+
+| Interaction | What happens |
+|---|---|
+| **`Win+F` → speak → `Win+F`** | Dictated text lands in your clipboard **and** is pasted with `Ctrl+V` |
+| **`Win+Shift+F`** | Visual picker (wofi) of your last 20 dictations → Enter pastes the chosen one |
+| **Say "hey jarvis"** (if wake word is on) | Dictation starts with no keyboard at all |
+| **`local-stt translate`** | Toggle: dictate in your language, the output is pasted in English |
+| **`local-stt config`** | Interactive menu for every setting (Enter keeps each value) |
+| **`local-stt reload`** | Applies config changes instantly (no restart, no VRAM loss) |
+| **`local-stt doctor`** | Diagnoses GPU, CUDA, daemon, hotkeys, clipboard tools, mic |
+
+Spoken punctuation while dictating: *"coma"* → `,` · *"punto"* → `.` ·
+*"punto y coma"* → `;` · *"punto y aparte" / "nueva línea"* → line break ·
+*"abrir/cerrar paréntesis"* · *"abrir/cerrar comillas"* · *"signo de
+interrogación"* · *"guion"* · *"barra"* · *"arroba"*.
+
 ## Requirements
 
 **Hardware / OS**
@@ -47,42 +121,11 @@ sudo pacman -S --needed wtype        # sends Ctrl+V on KDE/GNOME Wayland
 
 ---
 
-## Installation
-
-```bash
-# 1. Clone / enter the project
-cd ~/Documents/dev_projects/DevPaul/local_speech_to_text
-
-# 2. Make the scripts executable and run the installer
-chmod +x scripts/install.sh scripts/setup-hotkey.sh
-./scripts/install.sh
-```
-
-`install.sh` does all of the following:
-1. Installs system dependencies (Arch; safe to re-run).
-2. Creates `.venv` and installs the package with `pip install -e .` (this includes `nvidia-cublas-cu12` for the CUDA fix above).
-3. Writes an editable config to `~/.config/local-stt/config.toml` (only if it doesn't already exist).
-4. Installs the systemd user service `local-stt.service`.
-5. **Pre-downloads the model** (~1.5GB, one time) so your first real dictation is instant.
-
-```bash
-# 3. Register the global hotkeys (KDE Plasma 6 by default)
-./scripts/setup-hotkey.sh
-# GNOME:  LOCAL_STT_DESKTOP=gnome ./scripts/setup-hotkey.sh
-# Auto:   LOCAL_STT_DESKTOP=auto ./scripts/setup-hotkey.sh
-
-# 4. Enable the daemon at login and verify everything
-systemctl --user enable --now local-stt
-.venv/bin/local-stt doctor
-```
-
-**You're done.** Press `Super+F` (the Windows key + F), speak, press `Super+F` again. A notification confirms the text is in your clipboard; it is also auto-pasted with `Ctrl+V` where your cursor was.
-
-> **KDE note:** new custom shortcuts written to `khotkeysrc` may only take effect after logging out and back in (Plasma 6 doesn't hot-reload them). Manual fallback: *System Settings → Shortcuts → Custom Shortcuts → Add → Command/URL* → command `<repo>/.venv/bin/local-stt toggle`, trigger `Meta+F` (and a second entry for `local-stt pick` with `Meta+Shift+F`).
-
----
-
 ## Usage
+
+> The full install flow is described in
+> [Quick start](#quick-start-everything-in-one-command). Commands below are
+> for day-to-day use.
 
 | Command | What it does |
 |---|---|
@@ -101,6 +144,7 @@ systemctl --user enable --now local-stt
 | `local-stt config` | Interactive config editor (shows config when run without a TTY) |
 | `local-stt translate` | Toggle translation mode: dictate in your language, output in English |
 | `local-stt doctor` | Full diagnosis: GPU, CUDA, cuBLAS, daemon, model, hotkey, clipboard tools, mic |
+| `local-stt setup` | One-command onboarding: system deps, model, hotkeys, service, doctor + cheat sheet |
 | `local-stt transcribe audio.wav --copy` | One-off transcription of an audio file |
 
 Logs (useful for debugging): `journalctl --user -u local-stt -f`
@@ -279,6 +323,27 @@ Wake word monitor (optional) — always-on CPU stream → "hey jarvis" → start
 
 **One-command diagnosis**
 - `local-stt doctor` — checks GPU driver, CUDA, cuBLAS, daemon, model cache, hotkey, clipboard tools and microphone, and tells you exactly what to fix.
+
+---
+
+## What's still missing (roadmap & known limitations)
+
+Not implemented yet — documented so expectations are clear:
+
+| Item | Status | Notes |
+|---|---|---|
+| **CI (GitHub Actions)** | ❌ not set up | 71 local tests exist (`pytest tests/`) but nothing runs them on push. Next natural step. |
+| **AUR / PKGBUILD** | ❌ | Installation is currently clone + `install.sh`. A `local-stt` package would remove the venv from your home. |
+| **Push-to-talk (hold key)** | ❌ | Only toggle mode exists (press to start, press to stop). Hold-to-talk needs a long-running listener process per desktop shell. |
+| **Explicit microphone selection** | ❌ partial | The recorder uses the system default; switching defaults (e.g. headset vs webcam) means changing it in `pavucontrol`. A `mic = "device name"` config option is the natural next feature. |
+| **Custom Spanish wake word** | ❌ | openWakeWord ships English-trained models ("hey jarvis", "alexa"…). A custom "oye computadora" requires training a model (synthetic TTS data + fine-tune). |
+| **Wayland-native OSD** | partial | The floating indicator runs via XWayland (`DISPLAY`). Works, but a native layer-shell client (Qt/GTK) would survive XWayland-less sessions. |
+| **Exact window detection on KDE** | partial | Requires `kdotool` (AUR). The built-in KWin DBus fallback works but is best-effort and slower (see *Contextual vocabulary*). |
+| **Multi-language output** | ❌ | Whisper's `task=translate` only translates **into English**. Dictating Spanish → English works; the reverse doesn't exist upstream. |
+
+Also note: `local-stt history` and `pick` show the *raw* saved text; entries
+saved before a config change (e.g. enabling `numbers_to_digits`) are not
+re-processed.
 
 ---
 

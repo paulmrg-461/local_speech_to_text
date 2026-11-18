@@ -239,6 +239,131 @@ def cmd_pick(args):
         notify("Copiado", text[:120], icon="edit-paste")
 
 
+_SYSTEM_DEPS = (
+    # (binario, paquete pacman, para qué sirve)
+    ("wl-copy", "wl-clipboard", "copiar al portapapeles (Wayland)"),
+    ("wl-paste", "wl-clipboard", "verificar el clipboard"),
+    ("wtype", "wtype", "auto-pegar Ctrl+V (Wayland)"),
+    ("notify-send", "libnotify", "notificaciones"),
+    ("wofi", "wofi", "selector de historial (Win+Shift+F)"),
+    ("canberra-gtk-play", "libcanberra", "sonidos de inicio/fin"),
+    ("kdotool", "kdotool (AUR)", "detección exacta de ventana para vocabulario por app"),
+)
+
+
+def _check_system_deps() -> bool:
+    """Retorna True si falta algo; imprime el comando de instalación agrupado."""
+    import shutil
+
+    missing = [(bin_, pkg, why) for bin_, pkg, why in _SYSTEM_DEPS if not shutil.which(bin_)]
+    if not missing:
+        return False
+    print("\n⚠️  Dependencias de sistema opcionales/faltantes:")
+    for bin_, pkg, why in missing:
+        print(f"   {bin_:<20} {why}")
+    oficial = [p for _, p, _ in missing if "AUR" not in p]
+    if oficial:
+        print(f"\n   Instálalas con:\n   sudo pacman -S --needed {' '.join(dict.fromkeys(oficial))}")
+    aur = [p for _, p, _ in missing if "AUR" in p]
+    if aur:
+        print(f"   Opcional vía AUR: yay -S {' '.join(p.split(' ')[0] for p in aur)}")
+    return True
+
+
+def cmd_setup(args):
+    """Puesta en marcha total: deps -> modelo -> atajos -> servicio -> doctor -> chuleta."""
+    from .clipboard import notify
+
+    try:  # salida en orden aunque se redirija
+        import sys as _sys
+
+        _sys.stdout.reconfigure(line_buffering=True)
+    except Exception:
+        pass
+    repo = Path(__file__).resolve().parents[2]
+    cfg = _config_from_args(args)
+    print("=" * 62)
+    print("  local-stt setup — puesta en marcha asistida")
+    print("=" * 62)
+
+    # 1) deps de sistema
+    print("\n[1/5] Dependencias de sistema")
+    had_missing = _check_system_deps()
+    if not had_missing:
+        print("   ✅ todo presente")
+
+    # 2) modelo pre-descargado
+    print("\n[2/5] Modelo")
+    try:
+        from faster_whisper.utils import download_model
+
+        download_model(cfg.model)
+        print(f"   ✅ {cfg.model} listo")
+    except Exception as e:
+        print(f"   ⚠️  no se pudo descargar ahora ({e}); se bajará al primer dictado")
+
+    # 3) atajos de teclado
+    print("\n[3/5] Atajos (Win+F dictar, Win+Shift+F historial)")
+    hotkey = repo / "scripts" / "setup-hotkey.sh"
+    if hotkey.exists():
+        env = {**os.environ, "LOCAL_STT_DESKTOP": "auto"}
+        r = subprocess.run(["bash", str(hotkey)], env=env, timeout=60,
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        print("   ✅ registrados" if r.returncode == 0 else
+              "   ⚠️  no se pudieron registrar: configúralos en Ajustes → Atajos")
+        print("      (KDE: cierra sesión y entra de nuevo para que apliquen)")
+    else:
+        print(f"   ⚠️  {hotkey} no encontrado: registra el atajo a mano")
+
+    # 4) servicio systemd
+    print("\n[4/5] Servicio systemd --user")
+    unit_dst = Path.home() / ".config" / "systemd" / "user" / "local-stt.service"
+    unit_src = repo / "systemd" / "local-stt.service"
+    if not unit_dst.exists() and unit_src.exists():
+        unit_dst.parent.mkdir(parents=True, exist_ok=True)
+        unit_dst.write_text(unit_src.read_text().replace("%h", str(Path.home())))
+    if unit_dst.exists():
+        subprocess.run(["systemctl", "--user", "daemon-reload"], timeout=15)
+        subprocess.run(["systemctl", "--user", "enable", "--now", "local-stt"], timeout=30)
+        for _ in range(60):
+            if cfg.socket_path.exists():
+                break
+            time.sleep(0.5)
+        print("   ✅ daemon activo" if cfg.socket_path.exists() else "   ⚠️  arrancando lento: revisa 'local-stt doctor'")
+    else:
+        print("   ⚠️  sin unit systemd; corre '.venv/bin/local-stt daemon' manualmente")
+
+    # 5) doctor + chuleta
+    print("\n[5/5] Diagnóstico")
+    doc = subprocess.run([sys.executable, "-m", "local_speech_to_text.cli", "doctor"],
+                         timeout=120, capture_output=True, text=True,
+                         env={**os.environ, "PYTHONUNBUFFERED": "1"})
+    print("\n" + doc.stdout.strip())
+    print("\n" + "=" * 62)
+    if doc.returncode == 0:
+        print("  🟢 TODO LISTO. Chuleta:")
+    else:
+        print("  Chuleta (arriba tienes lo que falta por resolver):")
+    print("=" * 62)
+    print(_cheatsheet())
+
+
+def _cheatsheet() -> str:
+    return """
+  DICTAR          Win+F ... habla ... Win+F   → copia y pega (Ctrl+V)
+  HISTORIAL       Win+Shift+F  → elige un dictado anterior (wofi)
+  TRADUCIR        local-stt translate (alterna: dicta español → pega inglés)
+  CONFIG          local-stt config   → menú interactivo
+  RECARGAR        local-stt reload   → aplica cambios sin reiniciar
+  MANOS LIBRES    di "hey jarvis" (wake_word = true en config.toml)
+  DIAGNÓSTICO     local-stt doctor
+
+  Dictado con puntuación hablada:
+  "hola coma qué tal punto" → Hola, qué tal.
+  "nueva línea" · "punto y aparte" · "abrir/cerrar paréntesis" · "arroba"
+"""
+
+
 def cmd_config(args):
     """TUI interactivo para ~/.config/local-stt/config.toml (sin TTY: solo muestra)."""
     from .config_tui import run_tui
@@ -456,6 +581,9 @@ def main():
 
     cf = sub.add_parser("config", help="TUI: editar config.toml interactivamente")
     cf.set_defaults(func=cmd_config)
+
+    st = sub.add_parser("setup", help="Puesta en marcha total: deps, modelo, atajos, servicio, doctor")
+    st.set_defaults(func=cmd_setup)
 
     f = sub.add_parser("transcribe", help="Transcribe un archivo de audio")
     f.add_argument("file", help="Ruta a wav/mp3/flac")
