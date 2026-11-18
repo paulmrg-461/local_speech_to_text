@@ -1,248 +1,288 @@
-# Local Speech-to-Text para Linux — RTX 5070 12GB
+# Local Speech-to-Text for Linux — NVIDIA RTX 5070 12GB
 
-**Win+F → habla → Win+F → se copia y pega con Ctrl+V.**
-100% local, sin nube. Optimizado para tu RTX 5070 con `faster-whisper` en CUDA.
+**Win+F → speak → Win+F → your text is copied & pasted.**
+100% local voice dictation. No cloud, no telemetry, no subscription. Built on `faster-whisper` with CUDA, tuned for an RTX 5070 (12GB) on Arch Linux / EndeavourOS.
 
-> Funciona en Wayland (GNOME/KDE) y X11. Copia con `wl-copy`/`xclip` y auto-pega con `wtype`/`ydotool`/`xdotool`.
-> Si el daemon está apagado, el atajo **lo arranca solo** (espera el arranque del modelo y empieza a grabar).
+> Works on Wayland (KDE Plasma 6, GNOME) and X11. Copies via `wl-copy`/`xclip`, auto-pastes via `wtype`/`ydotool`/`xdotool`.
+> If the daemon is not running when you press the hotkey, **it starts it for you** (waits for the model to load, then starts recording on that same keypress).
+
+## Features
+
+| Feature | Description |
+|---|---|
+| 🔥 GPU transcription | `large-v3-turbo` on CUDA (float16): a short clip transcribes in well under a second |
+| ⌨️ Global hotkey | `Win+F` toggles dictation from any app. `Win+Shift+F` opens a visual picker of past dictations |
+| 📋 Clipboard + auto-paste | Result is copied and `Ctrl+V` is injected automatically (or paste manually) |
+| 🗣️ Spoken punctuation | Say *"punto y coma"*, *"nueva línea"*, *"abrir paréntesis"*… get `;`, a line break, `(` |
+| 📖 Custom vocabulary & corrections | Teach Whisper your names/jargon (`initial_prompt`) and fix recurring mistakes post-hoc |
+| 🖥️ Live OSD | Floating indicator with a real-time voice-level bar **and partial transcription while you speak** |
+| 🕘 History | Last 100 dictations saved locally (`local-stt history`, wofi/rofi picker, re-copy any entry) |
+| 🔥 Hot reload | Change model/language/vocabulary without restarting the daemon (`local-stt reload`) |
+| 🤚 Wake word (optional) | Say **"hey jarvis"** and dictation starts — no keyboard at all (CPU, openWakeWord) |
+| 🩺 `local-stt doctor` | One command diagnoses GPU, CUDA, daemon, hotkey, clipboard tools and microphone |
 
 ---
 
-## Instalación (EndeavourOS / Arch)
+## Requirements
+
+**Hardware / OS**
+- NVIDIA GPU with ≥4GB VRAM (developed and tuned on an RTX 5070 12GB; any CUDA card works)
+- Linux with PipeWire or PulseAudio (Arch / EndeavourOS instructions below)
+- A working microphone (check with `pavucontrol`)
+
+**System packages (Arch)**
 
 ```bash
-# 1. Clonar / entrar al proyecto
+sudo pacman -S --needed python python-pip portaudio wl-clipboard libnotify wofi
+# Optional but recommended for auto-paste on Wayland:
+sudo pacman -S --needed wtype        # sends Ctrl+V on KDE/GNOME Wayland
+# Alternative: ydotool (needs `sudo systemctl enable --now ydotool`)
+```
+
+> Other distros: install the equivalents (`portaudio19-dev`, `wl-clipboard`, `libnotify-bin`, `rofi` or `wofi`).
+
+**NVIDIA driver**
+- Any recent proprietary driver (580+ recommended). **If you just updated `nvidia-utils`, reboot before filing any bug** — a kernel/userspace mismatch makes `nvidia-smi` fail with `Driver/library version mismatch` even though CUDA may still work.
+- ⚠️ **CUDA note (Arch)**: the `cuda` package ships CUDA 13 (`libcublas.so.13`), but the `ctranslate2` wheel used by `faster-whisper` is built against CUDA 12 and does `dlopen("libcublas.so.12")` at runtime. This project solves it transparently: the pip package `nvidia-cublas-cu12` is installed into the venv and **preloaded with `ctypes`** before the model loads (see `src/local_speech_to_text/cuda_libs.py`). No wrappers, no `LD_LIBRARY_PATH`, no system changes.
+
+---
+
+## Installation
+
+```bash
+# 1. Clone / enter the project
 cd ~/Documents/dev_projects/DevPaul/local_speech_to_text
 
-# 2. Instalar todo (deps sistema + venv + config + modelo pre-descargado)
+# 2. Make the scripts executable and run the installer
 chmod +x scripts/install.sh scripts/setup-hotkey.sh
 ./scripts/install.sh
+```
 
-# 3. Configurar atajo Win+F (KDE Plasma 6 por defecto; GNOME con variable)
-./scripts/setup-hotkey.sh                          # KDE Plasma 6: Meta+F
-# GNOME: LOCAL_STT_DESKTOP=gnome ./scripts/setup-hotkey.sh
-# Auto-detectar: LOCAL_STT_DESKTOP=auto ./scripts/setup-hotkey.sh
+`install.sh` does all of the following:
+1. Installs system dependencies (Arch; safe to re-run).
+2. Creates `.venv` and installs the package with `pip install -e .` (this includes `nvidia-cublas-cu12` for the CUDA fix above).
+3. Writes an editable config to `~/.config/local-stt/config.toml` (only if it doesn't already exist).
+4. Installs the systemd user service `local-stt.service`.
+5. **Pre-downloads the model** (~1.5GB, one time) so your first real dictation is instant.
 
-# 4. Iniciar daemon y verificar todo
+```bash
+# 3. Register the global hotkeys (KDE Plasma 6 by default)
+./scripts/setup-hotkey.sh
+# GNOME:  LOCAL_STT_DESKTOP=gnome ./scripts/setup-hotkey.sh
+# Auto:   LOCAL_STT_DESKTOP=auto ./scripts/setup-hotkey.sh
+
+# 4. Enable the daemon at login and verify everything
 systemctl --user enable --now local-stt
 .venv/bin/local-stt doctor
 ```
 
-**Listo.** Presiona `Super+F` (tecla Windows + F), habla, vuelve a presionar `Super+F`. Verás notificación y el texto ya está en el portapapeles. Pega con `Ctrl+V` (o auto-pega si tienes `wtype`/`ydotool`).
+**You're done.** Press `Super+F` (the Windows key + F), speak, press `Super+F` again. A notification confirms the text is in your clipboard; it is also auto-pasted with `Ctrl+V` where your cursor was.
+
+> **KDE note:** new custom shortcuts written to `khotkeysrc` may only take effect after logging out and back in (Plasma 6 doesn't hot-reload them). Manual fallback: *System Settings → Shortcuts → Custom Shortcuts → Add → Command/URL* → command `<repo>/.venv/bin/local-stt toggle`, trigger `Meta+F` (and a second entry for `local-stt pick` with `Meta+Shift+F`).
 
 ---
 
-## Uso
+## Usage
 
-| Comando | Qué hace |
+| Command | What it does |
 |---|---|
-| `local-stt daemon` | Inicia daemon (mantiene modelo en VRAM, ~3GB) |
-| `local-stt toggle` | Alterna grabación; **auto-arranca el daemon si no corre** |
+| `local-stt daemon` | Runs the daemon in the foreground (keeps the model in VRAM, ~3GB) |
+| `local-stt toggle` | Toggles recording. **Auto-starts the daemon if it's down** and starts recording on the same keypress |
 | `local-stt status` | `recording` / `idle` |
-| `local-stt stop` | Detiene daemon |
-| `local-stt devices` | Lista micrófonos (elige con `pavucontrol`) |
-| `local-stt history` | Últimas 10 transcripciones |
-| `local-stt history --copy 2` | Copia al portapapeles la antepenúltima (`--copy` = última) |
-| `local-stt download` | Pre-descarga el modelo (primer uso instantáneo) |
-| `local-stt doctor` | Diagnóstico: GPU, CUDA, daemon, atajo, clipboard, micro |
-| `local-stt transcribe audio.wav --copy` | Transcribe un archivo suelto |
+| `local-stt stop` | Stops the daemon |
+| `local-stt devices` | Lists microphones (pick the default in `pavucontrol` → Input) |
+| `local-stt history` | Shows the last 10 transcriptions |
+| `local-stt history --copy 2` | Copies the second-to-last one (`--copy` alone = the latest) |
+| `local-stt pick` | Visual picker (wofi/rofi) of the last 20 dictations; Enter copies & pastes the chosen one |
+| `local-stt download` | Pre-downloads the model (first use becomes instant) |
+| `local-stt reload` | Re-reads config (TOML + env) without restarting the daemon |
+| `local-stt vocab [list\|add\|remove]` | Manage the custom vocabulary passed as Whisper's `initial_prompt` |
+| `local-stt correct 'bad' 'good'` | Add a post-transcription correction rule |
+| `local-stt doctor` | Full diagnosis: GPU, CUDA, cuBLAS, daemon, model, hotkey, clipboard tools, mic |
+| `local-stt transcribe audio.wav --copy` | One-off transcription of an audio file |
 
-### Dictado con puntuación hablada
+Logs (useful for debugging): `journalctl --user -u local-stt -f`
 
-Activo por defecto (`dictation_commands = true`). Ejemplos:
+### Hotkeys
 
-| Dices | Sale |
+| Keys | Action |
+|---|---|
+| `Win+F` | Start/stop dictation |
+| `Win+Shift+F` | Pick & paste a previous dictation (requires `wofi`) |
+
+Manual setup if the script couldn't do it:
+- **KDE Plasma 6:** *System Settings → Shortcuts → Custom Shortcuts → Add → Command/URL* — command `<repo>/.venv/bin/local-stt toggle`, trigger `Meta+F`.
+- **GNOME:** *Settings → Keyboard → Custom Shortcuts → +* — same command, binding `<Super>f`.
+
+### Spoken punctuation (Spanish, on by default)
+
+| You say | You get |
 |---|---|
 | "hola coma qué tal punto" | `Hola, qué tal.` |
 | "punto y coma" / "dos puntos" | `;` / `:` |
-| "punto y aparte" / "nueva línea" | `.` + salto de línea |
+| "punto y aparte" / "nueva línea" | `.` + line break |
 | "abrir paréntesis … cerrar paréntesis" | `( … )` |
 | "abrir comillas … cerrar comillas" | `" … "` |
 | "signo de interrogación" | `?` |
 | "guion" / "barra" / "arroba" | `-` / `/` / `@` |
 
-### Vocabulario y correcciones
+Disable with `dictation_commands = false` if it interferes with your natural speech.
 
-Whisper reconoce mejor tus nombres/términos si se los enseñas:
+### Custom vocabulary & corrections
+
+Whisper recognizes your personal names and jargon much better if you teach it:
 
 ```bash
-local-stt vocab add 'DevPaul' 'FastAPI' 'ydotool'   # initial_prompt
-local-stt correct 'dev pablo' 'DevPaul'             # corrección post-transcripción
-local-stt vocab                                      # ver / list
-local-stt reload                                     # aplicar sin reiniciar
+local-stt vocab add 'DevPaul' 'FastAPI' 'ydotool'   # biases transcription (initial_prompt)
+local-stt correct 'dev pablo' 'DevPaul'             # fixes recurring mistakes after transcription
+local-stt vocab                                      # list current terms
+local-stt reload                                     # apply without restarting
 ```
 
-Archivos: `~/.config/local-stt/vocabulary.txt` (un término por línea) y
-`corrections.txt` (líneas `mal -> bien`).
+Files: `~/.config/local-stt/vocabulary.txt` (one term per line) and `~/.config/local-stt/corrections.txt` (lines of `wrong -> right`). Corrections are word-boundary aware and preserve capitalization.
 
-### OSD con nivel de voz y texto en vivo
+### Live OSD with voice level and partial text
 
-Al grabar aparece un indicador flotante arriba-centro: barra de nivel de tu
-voz en tiempo real (verde = te oye) + la transcripción **parcial mientras
-hablas**. Se cierra solo al parar. Desactivable:
+While recording, a small frameless window appears at the top-center of your screen: a green voice-level bar (it moves when the mic hears you) plus the **partial transcription updating every ~1.5s as you speak**. It closes itself when you stop. Disable per-feature:
 
 ```toml
-overlay = false         # sin OSD
-partial_results = false # sin texto en vivo
+overlay = false         # no OSD at all
+partial_results = false  # OSD without live text
 ```
 
-### Recuperar dictados anteriores
-
-- **`Win+Shift+F`** → selector visual (wofi) de los últimos 20 dictados → Enter copia y pega. Requiere `sudo pacman -S wofi`.
-- `local-stt history` → listado; `local-stt history --copy 2` → copia la antepenúltima.
-
-### Cambiar config sin reiniciar
-
-Edita `~/.config/local-stt/config.toml` y ejecuta `local-stt reload`
-(modelo/idioma/vocab/correcciones al vuelo; el modelo solo se recarga si cambió).
-
-### Manos libres: wake word (opcional)
+### Hands-free wake word (optional)
 
 ```bash
 .venv/bin/pip install 'local-speech-to-text[wakeword]'   # openwakeword + onnxruntime
 ```
 
 ```toml
-wake_word = true          # di "hey jarvis" y el dictado empieza solo
-wake_word_model = "hey_jarvis"   # alexa, hey_mycroft... o ruta a .onnx custom
+wake_word = true              # say "hey jarvis" and dictation starts
+wake_word_model = "hey_jarvis"   # alexa, hey_mycroft, hey_rhasspy… or path to a custom .onnx
 wake_word_threshold = 0.5
 ```
 
-El micrófono queda escuchando en CPU (~0% GPU). Durante el dictado se pausa
-para no re-dispararse. Apagado por defecto: `wake_word = false` + `local-stt reload`.
-
-### Atajo manual (si el script no te lo configuró)
-
-**KDE Plasma 6 (default):** **Ajustes del sistema → Atajos → Atajos personalizados → Añadir → Orden/URL**
-- Nombre: `Local STT`
-- Orden: `/ruta/completa/.venv/bin/local-stt toggle`
-- Activador: `Meta+F` (Win+F)
-
-**GNOME:** **Configuración → Teclado → Atajos personalizados → +**
-- Nombre: `Local STT`
-- Comando: `/ruta/completa/.venv/bin/local-stt toggle`
-- Atajo: `Super+F`
-- O automático: `LOCAL_STT_DESKTOP=gnome ./scripts/setup-hotkey.sh`
-
-KDE: **Preferencias → Atajos → Añadir comando** → mismo comando → `Meta+F`
+Runs entirely on CPU (~0% GPU). The monitor pauses while you dictate so it can't re-trigger itself. It listens continuously — turn it off (`wake_word = false` + `local-stt reload`) if you don't want an always-on microphone.
 
 ---
 
-## Modelos y VRAM (RTX 5070 12GB)
+## Configuration
 
-| Modelo | VRAM (float16) | Velocidad | Precisión ES |
-|---|---|---|---|
-| `tiny` | ~1 GB | ⚡⚡⚡ | baja |
-| `small` | ~2 GB | ⚡⚡ | media |
-| `medium` | ~3 GB | ⚡ | buena |
-| **`large-v3-turbo`** | **~4 GB** | **⚡ (6× vs large-v3)** | **excelente — recomendado** |
-| `large-v3` | ~10 GB | lento | máxima |
-| `distil-large-v3` | ~6 GB | ⚡ | muy buena |
-
-Cambiar modelo:
-
-```bash
-LOCAL_STT_MODEL=medium local-stt daemon
-# o permanente en ~/.config/systemd/user/local-stt.service -> Environment=
-```
-
-Si te quedas sin VRAM: `LOCAL_STT_COMPUTE=int8_float16` (mitad de VRAM, poca pérdida).
-
----
-
-## Configuración
-
-Edita `~/.config/local-stt/config.toml` (lo crea el instalador) y reinicia con
-`systemctl --user restart local-stt`. Las variables de entorno siguen
-funcionando y **ganan** sobre el TOML:
+Edit `~/.config/local-stt/config.toml` (created by the installer) and run `local-stt reload`. **Environment variables always win over the TOML**, and CLI flags win over everything.
 
 ```toml
 model = "large-v3-turbo"   # tiny, base, small, medium, large-v3, distil-large-v3
-language = "es"            # "auto" autodetecta
-device = "cuda"
-compute_type = "float16"   # int8_float16 = mitad de VRAM
+language = "es"            # "auto" for autodetection
+device = "cuda"            # or "cpu"
+compute_type = "float16"   # "int8_float16" = half the VRAM, minor quality loss
 beam_size = 5
-auto_paste = true
-dictation_commands = true  # puntuación hablada
-silence_stop = false       # true = manos libres: para tras 1.5s de silencio
+max_record_seconds = 120   # safety auto-stop
+auto_paste = true          # send Ctrl+V automatically
+dictation_commands = true  # spoken punctuation
+silence_stop = false       # true = stop recording after silence_threshold_ms of silence
+silence_threshold_ms = 1500
+overlay = true             # floating OSD while recording
+partial_results = true     # live partial transcription in the OSD
+partial_interval = 1.5     # seconds between partials
+# wake_word = false        # hands-free ("hey jarvis") — see above
 ```
 
-Equivalencias de entorno: `LOCAL_STT_MODEL`, `LOCAL_STT_LANG`, `LOCAL_STT_DEVICE`,
-`LOCAL_STT_COMPUTE`, `LOCAL_STT_BEAM`, `LOCAL_STT_AUTO_PASTE`,
-`LOCAL_STT_DICTATION_COMMANDS`, `LOCAL_STT_SILENCE_STOP`, `LOCAL_STT_SILENCE_MS`,
-`LOCAL_STT_MAX_SECS`.
+Environment equivalents: `LOCAL_STT_MODEL`, `LOCAL_STT_LANG`, `LOCAL_STT_DEVICE`, `LOCAL_STT_COMPUTE`, `LOCAL_STT_BEAM`, `LOCAL_STT_MAX_SECS`, `LOCAL_STT_AUTO_PASTE`, `LOCAL_STT_DICTATION_COMMANDS`, `LOCAL_STT_SILENCE_STOP`, `LOCAL_STT_SILENCE_MS`, `LOCAL_STT_VAD`, `LOCAL_STT_VOCAB`, `LOCAL_STT_CORRECTIONS`, `LOCAL_STT_OVERLAY`, `LOCAL_STT_PARTIAL`, `LOCAL_STT_PARTIAL_SECS`, `LOCAL_STT_WAKE_WORD`, `LOCAL_STT_WAKE_MODEL`, `LOCAL_STT_WAKE_THRESHOLD`.
+
+### Models & VRAM (RTX 5070 12GB)
+
+| Model | VRAM (float16) | Speed | Spanish accuracy |
+|---|---|---|---|
+| `tiny` | ~1 GB | ⚡⚡⚡ | low |
+| `small` | ~2 GB | ⚡⚡ | medium |
+| `medium` | ~3 GB | ⚡ | good |
+| **`large-v3-turbo`** | **~4 GB** | **⚡ 6× faster than large-v3** | **excellent — recommended** |
+| `large-v3` | ~10 GB | slow | maximum |
+| `distil-large-v3` | ~6 GB | ⚡ | very good (English-centric) |
+
+Switching: change `model` in the TOML (or `LOCAL_STT_MODEL=medium`) and `local-stt reload`. The model reloads lazily on the next dictation; everything else applies instantly.
 
 ---
 
-## Cómo funciona (arquitectura)
+## How it works (architecture)
 
 ```
-Win+F (khotkeys/gsettings atajo) → `local-stt toggle` → socket /tmp/local-stt.sock
-                        │ (si el daemon no corre: lo arranca vía systemd y espera)
-                        ▼
-                       Daemon (modelo en VRAM)
-                       → AudioRecorder (sounddevice, 16kHz, RMS para silencio)
-                       → Transcriber (faster-whisper CUDA, cuBLAS 12 precargada)
-                       → text_cleaner ("punto y coma" → ";")
-                       → historial JSONL + wl-copy / xclip + notify + wtype Ctrl+V
+Win+F (khotkeys / gsettings shortcut)
+  → `local-stt toggle`
+      ├─ daemon down? → auto-start via systemd, wait for model, record on this keypress
+      └─ unix socket /tmp/local-stt.sock → Daemon (model kept in VRAM)
+            ├─ AudioRecorder   (sounddevice, 16kHz mono, RMS tracking for silence)
+            ├─ Partial worker  (beam-1 re-transcription of the last 10s, feeds the OSD)
+            ├─ OSD subprocess  (tkinter: voice bar + partial text, polls "level")
+            ├─ Transcriber     (faster-whisper CUDA; cuBLAS 12 preloaded via ctypes)
+            ├─ text_cleaner    ("punto y coma" → ";")
+            ├─ corrections     (word-boundary replacements from corrections.txt)
+            ├─ History         (~/.local/share/local-stt/history.jsonl, last 100)
+            └─ wl-copy / xclip + notify-send + wtype Ctrl+V (auto-paste)
+Wake word monitor (optional) — always-on CPU stream → "hey jarvis" → starts recording
 ```
 
-- El **daemon** carga el modelo una vez y lo mantiene en VRAM (arranque ~10s, luego transcripción <1s).
-- Sin daemon cada transcripción recargaría el modelo (lento).
-- **cuBLAS 12**: Arch instala CUDA 13 pero ctranslate2 necesita `libcublas.so.12`;
-  se trae por pip (`nvidia-cublas-cu12`) y se precarga con `ctypes` al iniciar (ver `cuda_libs.py`).
-- Audio va por PipeWire/PulseAudio, 16kHz mono.
+- The **daemon** loads the model once and keeps it in VRAM: startup ~10s (once per login), then each transcription takes well under a second.
+- **Without** the daemon every dictation would reload the model (slow). That's why the toggle auto-starts it.
+- Audio flows through PipeWire/PulseAudio at 16kHz mono.
+- **cuBLAS 12**: Arch ships CUDA 13 but ctranslate2 is built for CUDA 12; the pip package `nvidia-cublas-cu12` provides the missing library and `cuda_libs.py` preloads it with `ctypes.CDLL(..., RTLD_GLOBAL)` before the model loads.
 
 ---
 
 ## Troubleshooting
 
-**`nvidia-smi` dice "Driver/library version mismatch"**
-- Actualizaste `nvidia-utils` sin reiniciar. **Reinicia el equipo.**
-- Mientras tanto la transcripción CUDA puede seguir funcionando (el runtime no usa NVML).
+**`nvidia-smi` says "Driver/library version mismatch"**
+- You updated `nvidia-utils` without rebooting. **Reboot.** Until then, CUDA inference may still work (the CUDA runtime doesn't use NVML), but fix it properly.
+- `local-stt doctor` detects this case explicitly.
 
-**CUDA falla con "Library libcublas.so.12 is not found"**
-- Arch instala CUDA 13 y ctranslate2 (compilado para CUDA 12) no la encuentra.
-- Solución ya incluida: `.venv/bin/pip install nvidia-cublas-cu12` (se precarga sola).
-- Verifica: `local-stt doctor`.
+**CUDA fails with "Library libcublas.so.12 is not found or cannot be loaded"**
+- Arch has CUDA 13 only; the fix ships with this repo: `.venv/bin/pip install nvidia-cublas-cu12` (it's in `pyproject.toml` and preloaded automatically). Verify with `local-stt doctor`.
 
-**`nvidia-smi` no funciona / fallback a CPU**
-- Instala drivers: `sudo pacman -S nvidia nvidia-utils` y reinicia. Verifica `nvidia-smi`.
-- El daemon hace fallback automático a CPU si no hay CUDA, pero será 5-10× más lento.
+**Falls back to CPU (5-10× slower)**
+- Check `nvidia-smi` works and `local-stt doctor` shows a CUDA device. Reinstall drivers: `sudo pacman -S nvidia nvidia-utils`.
 
-**No graba / micrófono equivocado**
-- `local-stt devices` y elige default en `pavucontrol` → Entrada.
-- `arecord -l` y `pactl list sources` para debug.
+**Wrong microphone / doesn't record**
+- `local-stt devices` to list inputs; set the default in `pavucontrol` → Input Devices.
+- Debug: `arecord -l`, `pactl list sources`.
 
-**Wayland no pega automático**
-- Instala `wtype`: `yay -S wtype` o `paru -S wtype`
-- Alternativa: `ydotool` (necesita `sudo systemctl enable --now ydotool`)
-- Si nada, simplemente haz `Ctrl+V` manual (el texto ya está copiado).
+**Auto-paste doesn't work on Wayland**
+- Install `wtype` (`sudo pacman -S wtype`) or `ydotool` (then `sudo systemctl enable --now ydotool`).
+- Worst case the text is still in your clipboard: press `Ctrl+V` manually.
 
-**Atajo no dispara**
-- Verifica: `gsettings get org.gnome.settings-daemon.plugins.media-keys custom-keybindings`
-- Debe aparecer `/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom-local-stt/`
-- Revisa que el comando apunte a la ruta absoluta de `.venv/bin/local-stt`.
-- En KDE: Ajustes del sistema → Atajos → Atajos personalizados → Local STT.
+**Hotkey doesn't fire**
+- KDE: log out/in once after `setup-hotkey.sh` (Plasma 6 doesn't hot-reload `khotkeysrc`), then check *System Settings → Shortcuts → Custom Shortcuts → Local STT*.
+- GNOME: `gsettings get org.gnome.settings-daemon.plugins.media-keys custom-keybindings` should list the `custom-local-stt` entry; the command must point to the absolute path of `.venv/bin/local-stt`.
 
-**Texto vacío / no entiende**
-- Habla más cerca del micro, revisa volumen en `pavucontrol`.
-- Prueba `LOCAL_STT_LANG=auto` o `LOCAL_STT_LANG=en` si mezclas idiomas.
-- Test con archivo: `local-stt transcribe test.wav`.
+**Empty or garbage transcription**
+- Speak closer to the mic; check input level in `pavucontrol`.
+- Mixed languages? Set `language = "auto"` (or `"en"`).
+- Test the model directly: `local-stt transcribe yourfile.wav`.
 
-**Diagnóstico completo en un comando**
-- `local-stt doctor` (GPU, CUDA, cuBLAS, daemon, modelo, atajo, clipboard, micro).
+**One-command diagnosis**
+- `local-stt doctor` — checks GPU driver, CUDA, cuBLAS, daemon, model cache, hotkey, clipboard tools and microphone, and tells you exactly what to fix.
 
 ---
 
-## Desinstalar
+## Uninstall
 
 ```bash
-systemctl --user disable --now local-stt 2>/dev/null
-gsettings set org.gnome.settings-daemon.plugins.media-keys custom-keybindings "[]"
+systemctl --user disable --now local-stt
+rm -f  ~/.config/systemd/user/local-stt.service && systemctl --user daemon-reload
+gsettings set org.gnome.settings-daemon.plugins.media-keys custom-keybindings "[]"   # GNOME only
 rm -rf .venv
+# optional: your data
+rm -rf ~/.config/local-stt ~/.local/share/local-stt ~/.local/state/local-stt
 ```
 
-## Licencia
+## Development
+
+```bash
+.venv/bin/pip install -e '.[dev]'
+.venv/bin/python -m pytest tests/ -q
+```
+
+Pure-Python logic (text cleaning, config layering, vocabulary, corrections, OSD protocol) is unit-tested; GPU/daemon paths are covered by `local-stt doctor` and an end-to-end toggle.
+
+## License
 
 MIT
