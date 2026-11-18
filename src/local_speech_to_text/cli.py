@@ -87,6 +87,12 @@ def cmd_stop(args):
     print(resp)
 
 
+def cmd_reload(args):
+    """Recarga config (TOML/env) sin reiniciar el daemon. Cambia modelo/idioma al vuelo."""
+    resp = send_command("reload", _config_from_args(args).socket_path)
+    print(resp)
+
+
 def cmd_devices(args):
     print(AudioRecorder.list_devices())
 
@@ -322,6 +328,9 @@ def main():
 
     q = sub.add_parser("stop", help="Detiene el daemon")
     q.set_defaults(func=cmd_stop)
+
+    r = sub.add_parser("reload", help="Recarga config en caliente (modelo/idioma/vocab)")
+    r.set_defaults(func=cmd_reload)
 
     dev = sub.add_parser("devices", help="Lista micrófonos")
     dev.set_defaults(func=cmd_devices)

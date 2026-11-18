@@ -148,6 +148,26 @@ class Daemon:
         except Exception as e:
             print(f"[daemon] historial no guardado: {e}")
 
+    def reload_config(self) -> str:
+        """Relee config (TOML + env). El modelo se recarga solo si cambió."""
+        old = self.config
+        new = Config.load()
+        changed = [k for k in ("model", "device", "compute_type") if getattr(old, k) != getattr(new, k)]
+        self.config = new
+        # aplicar live-settings al recorder
+        self.recorder.silence_rms = new.silence_rms
+        if changed:
+            print(f"[daemon] Config cambió {changed}: se recargará el modelo en el próximo dictado")
+            self.transcriber = None  # descarga VRAM; se recarga lazy en el próximo toggle
+            self.corrections = []
+        else:
+            # vocab/correcciones se recargan al recargar el modelo; aplicar ya las correcciones
+            from .vocab import load_corrections
+
+            self.corrections = load_corrections(new.corrections_file)
+            print("[daemon] Config recargada en caliente (modelo sin cambios)")
+        return f"ok recargado: model={new.model} lang={new.language or 'auto'}"
+
     # --- Socket IPC para toggle desde atajo ---
     def _serve(self):
         if self._sock_path.exists():
@@ -184,6 +204,11 @@ class Daemon:
                     elif data in ("stop", "toggle", ""):
                         self.toggle()
                         conn.sendall(b"ok\n")
+                    elif data == "reload":
+                        try:
+                            conn.sendall((self.reload_config() + "\n").encode())
+                        except Exception as e:
+                            conn.sendall(f"error: {e}\n".encode())
                     elif data == "status":
                         state = "recording" if self.recorder.is_recording else "idle"
                         conn.sendall(f"{state}\n".encode())
