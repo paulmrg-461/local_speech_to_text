@@ -67,38 +67,35 @@ setup_kde() {
   KHOTKEYSRC="${XDG_CONFIG_HOME:-$HOME/.config}/khotkeysrc"
   local UUID="local-stt-toggle-$(echo -n "$BIN" | md5sum | cut -c1-8)"
 
-  # Grupo Data: dos acciones (dictado e historial) (ignora error en sandbox RO)
-  kwriteconfig6 --file khotkeysrc --group Data --key DataCount 2 2>/dev/null || true
+  # Grupo Data: dictado (opcional) + historial. Con push-to-talk el listener
+  # evdev es dueño de Win+F, así que el compositor solo registra historial.
+  kwriteconfig6 --file khotkeysrc --group Data --key DataCount \
+    "$([[ "${LOCAL_STT_SKIP_TOGGLE:-0}" == "1" ]] && echo 1 || echo 2)" 2>/dev/null || true
 
-  # ---- Acción 1: dictado (Meta+F -> toggle) ----
-  kwriteconfig6 --file khotkeysrc --group Data_1 --key Comment "Local STT Dictado (Win+F)" 2>/dev/null || true
-  kwriteconfig6 --file khotkeysrc --group Data_1 --key Enabled true 2>/dev/null || true
-  kwriteconfig6 --file khotkeysrc --group Data_1 --key Name "Local STT" 2>/dev/null || true
-  kwriteconfig6 --file khotkeysrc --group Data_1 --key Type "SIMPLE_ACTION_DATA" 2>/dev/null || true
-  kwriteconfig6 --file khotkeysrc --group Data_1Actions --key ActionsCount 1 2>/dev/null || true
-  kwriteconfig6 --file khotkeysrc --group Data_1Actions0 --key CommandURL "$BIN toggle" 2>/dev/null || true
-  kwriteconfig6 --file khotkeysrc --group Data_1Actions0 --key Type "COMMAND_URL" 2>/dev/null || true
-  kwriteconfig6 --file khotkeysrc --group Data_1Conditions --key ConditionsCount 0 2>/dev/null || true
-  kwriteconfig6 --file khotkeysrc --group Data_1Conditions --key Comment "" 2>/dev/null || true
-  kwriteconfig6 --file khotkeysrc --group Data_1Triggers --key TriggersCount 1 2>/dev/null || true
-  kwriteconfig6 --file khotkeysrc --group Data_1Triggers0 --key Key "Meta+F" 2>/dev/null || true
-  kwriteconfig6 --file khotkeysrc --group Data_1Triggers0 --key Type "SHORTCUT" 2>/dev/null || true
-  kwriteconfig6 --file khotkeysrc --group Data_1Triggers0 --key Uuid "$UUID" 2>/dev/null || true
+  kde_action() {
+    local idx="$1" name="$2" command="$3" key="$4" uuid="$5"
+    kwriteconfig6 --file khotkeysrc --group "Data_$idx" --key Comment "$name" 2>/dev/null || true
+    kwriteconfig6 --file khotkeysrc --group "Data_$idx" --key Enabled true 2>/dev/null || true
+    kwriteconfig6 --file khotkeysrc --group "Data_$idx" --key Name "$name" 2>/dev/null || true
+    kwriteconfig6 --file khotkeysrc --group "Data_$idx" --key Type "SIMPLE_ACTION_DATA" 2>/dev/null || true
+    kwriteconfig6 --file khotkeysrc --group "Data_${idx}Actions" --key ActionsCount 1 2>/dev/null || true
+    kwriteconfig6 --file khotkeysrc --group "Data_${idx}Actions0" --key CommandURL "$command" 2>/dev/null || true
+    kwriteconfig6 --file khotkeysrc --group "Data_${idx}Actions0" --key Type "COMMAND_URL" 2>/dev/null || true
+    kwriteconfig6 --file khotkeysrc --group "Data_${idx}Conditions" --key ConditionsCount 0 2>/dev/null || true
+    kwriteconfig6 --file khotkeysrc --group "Data_${idx}Conditions" --key Comment "" 2>/dev/null || true
+    kwriteconfig6 --file khotkeysrc --group "Data_${idx}Triggers" --key TriggersCount 1 2>/dev/null || true
+    kwriteconfig6 --file khotkeysrc --group "Data_${idx}Triggers0" --key Key "$key" 2>/dev/null || true
+    kwriteconfig6 --file khotkeysrc --group "Data_${idx}Triggers0" --key Type "SHORTCUT" 2>/dev/null || true
+    kwriteconfig6 --file khotkeysrc --group "Data_${idx}Triggers0" --key Uuid "$uuid" 2>/dev/null || true
+  }
 
-  # ---- Acción 2: selector de historial (Meta+Shift+F -> pick) ----
-  kwriteconfig6 --file khotkeysrc --group Data_2 --key Comment "Local STT Historial (Win+Shift+F)" 2>/dev/null || true
-  kwriteconfig6 --file khotkeysrc --group Data_2 --key Enabled true 2>/dev/null || true
-  kwriteconfig6 --file khotkeysrc --group Data_2 --key Name "Local STT Historial" 2>/dev/null || true
-  kwriteconfig6 --file khotkeysrc --group Data_2 --key Type "SIMPLE_ACTION_DATA" 2>/dev/null || true
-  kwriteconfig6 --file khotkeysrc --group Data_2Actions --key ActionsCount 1 2>/dev/null || true
-  kwriteconfig6 --file khotkeysrc --group Data_2Actions0 --key CommandURL "$BIN pick" 2>/dev/null || true
-  kwriteconfig6 --file khotkeysrc --group Data_2Actions0 --key Type "COMMAND_URL" 2>/dev/null || true
-  kwriteconfig6 --file khotkeysrc --group Data_2Conditions --key ConditionsCount 0 2>/dev/null || true
-  kwriteconfig6 --file khotkeysrc --group Data_2Conditions --key Comment "" 2>/dev/null || true
-  kwriteconfig6 --file khotkeysrc --group Data_2Triggers --key TriggersCount 1 2>/dev/null || true
-  kwriteconfig6 --file khotkeysrc --group Data_2Triggers0 --key Key "Meta+Shift+F" 2>/dev/null || true
-  kwriteconfig6 --file khotkeysrc --group Data_2Triggers0 --key Type "SHORTCUT" 2>/dev/null || true
-  kwriteconfig6 --file khotkeysrc --group Data_2Triggers0 --key Uuid "$UUID-pick" 2>/dev/null || true
+  if [[ "${LOCAL_STT_SKIP_TOGGLE:-0}" == "1" ]]; then
+    kde_action 1 "Local STT Historial (Win+Shift+F)" "$BIN pick" "Meta+Shift+F" "$UUID-pick"
+    echo "   Push-to-talk: Win+F lo gestiona el daemon (listener evdev)"
+  else
+    kde_action 1 "Local STT Dictado (Win+F)" "$BIN toggle" "Meta+F" "$UUID"
+    kde_action 2 "Local STT Historial (Win+Shift+F)" "$BIN pick" "Meta+Shift+F" "$UUID-pick"
+  fi
 
   if [[ ! -f "$KHOTKEYSRC" ]]; then
     echo "❌ No se pudo escribir $KHOTKEYSRC (¿sistema de archivos de solo lectura? Ejecuta fuera del sandbox/contenedor)"
@@ -116,7 +113,11 @@ setup_kde() {
   echo "   Alternativa: kquitapp6 kglobalaccel && kglobalaccel6 &  (o reinicia)"
 
   echo ""
-  echo "✅ Atajos KDE configurados: Meta+F -> dictado | Meta+Shift+F -> historial"
+  if [[ "${LOCAL_STT_SKIP_TOGGLE:-0}" == "1" ]]; then
+    echo "✅ Atajo KDE: Win+Shift+F -> historial (Win+F lo gestiona push-to-talk)"
+  else
+    echo "✅ Atajos KDE configurados: Meta+F -> dictado | Meta+Shift+F -> historial"
+  fi
   echo "   Verifica en: Ajustes del sistema → Atajos → Atajos personalizados → Local STT"
   echo "   Prueba: presiona Win+F. Si no funciona, reasigna el activador a Meta+F manualmente."
 }
@@ -159,11 +160,21 @@ setup_gnome() {
     fi
     gsettings set org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:"$TARGET" name "$NAME"
     gsettings set org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:"$TARGET" command "$COMMAND"
+    if [[ "${LOCAL_STT_SKIP_TOGGLE:-0}" == "1" && "$TARGET" == *"/custom-local-stt/" ]]; then
+      # push-to-talk: el listener evdev es dueño de Win+F
+      gsettings set org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:"$TARGET" binding "" 2>/dev/null || true
+      echo "   Push-to-talk: atajo de dictado desactivado en GNOME"
+      continue
+    fi
     gsettings set org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:"$TARGET" binding "$BINDING"
   done
 
   echo ""
-  echo "✅ Atajos GNOME configurados: Super+F -> dictado | Super+Shift+F -> historial"
+  if [[ "${LOCAL_STT_SKIP_TOGGLE:-0}" == "1" ]]; then
+    echo "✅ Atajos GNOME: Win+F -> push-to-talk (evdev) | Win+Shift+F -> historial"
+  else
+    echo "✅ Atajos GNOME configurados: Super+F -> dictado | Super+Shift+F -> historial"
+  fi
   echo "   Prueba: presiona Win+F. Si no funciona, revisa Configuración → Teclado → Atajos personalizados."
 }
 

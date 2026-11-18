@@ -32,6 +32,7 @@ optdepends=(
   'kdotool: ventana activa exacta en KDE (AUR)'
   'python-openwakeword: manos libres con wake word "hey jarvis" (AUR)'
   'python-onnxruntime-cpu: motor del wake word'
+  'python-evdev: push-to-talk (mantener tecla para dictar)'
   'cuda: runtime CUDA para faster-whisper'
   'nvidia-utils: driver NVIDIA'
 )

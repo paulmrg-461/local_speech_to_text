@@ -19,6 +19,7 @@
 | 🕘 History | Last 100 dictations saved locally (`local-stt history`, wofi/rofi picker, re-copy any entry) |
 | 🔥 Hot reload | Change model/language/vocabulary without restarting the daemon (`local-stt reload`) |
 | 🤚 Wake word (optional) | Say **"hey jarvis"** and dictation starts — no keyboard at all (CPU, openWakeWord) |
+| ✋ Push-to-talk (optional) | **Hold Win+F** to record, release to transcribe (real key release via `evdev`; see [Push-to-talk](#push-to-talk-hold-to-dictate)) |
 | 🩺 `local-stt doctor` | One command diagnoses GPU, CUDA, daemon, hotkey, clipboard tools and microphone |
 
 ---
@@ -115,6 +116,7 @@ auto-pasted with `Ctrl+V` where your cursor was.
 | **`Win+F` → speak → `Win+F`** | Dictated text lands in your clipboard **and** is pasted with `Ctrl+V` |
 | **`Win+Shift+F`** | Visual picker (wofi) of your last 20 dictations → Enter pastes the chosen one |
 | **Say "hey jarvis"** (if wake word is on) | Dictation starts with no keyboard at all |
+| **Hold `Win+F`** (if push-to-talk is on) | Records while held; releasing transcribes. A quick tap behaves like the normal toggle |
 | **`local-stt translate`** | Toggle: dictate in your language, the output is pasted in English |
 | **`local-stt config`** | Interactive menu for every setting (Enter keeps each value) |
 | **`local-stt reload`** | Applies config changes instantly (no restart, no VRAM loss) |
@@ -124,6 +126,42 @@ Spoken punctuation while dictating: *"coma"* → `,` · *"punto"* → `.` ·
 *"punto y coma"* → `;` · *"punto y aparte" / "nueva línea"* → line break ·
 *"abrir/cerrar paréntesis"* · *"abrir/cerrar comillas"* · *"signo de
 interrogación"* · *"guion"* · *"barra"* · *"arroba"*.
+
+## Push-to-talk (hold to dictate)
+
+Optional mode: **hold `Win+F`** while you speak, **release to transcribe**.
+
+```bash
+.venv/bin/pip install 'local-speech-to-text[hold]'   # añade python-evdev
+sudo usermod -aG input "$USER"                       # luego cierra sesión y entra
+.venv/bin/local-stt config                           # push_to_talk = on
+```
+
+```toml
+push_to_talk = true
+hold_key = "super+f"   # modificadores + tecla
+hold_min_ms = 200      # por debajo se trata como tap (primer toggle)
+hold_devices = []      # [] = todos los teclados; mejor limita por nombre
+```
+
+How it works and what to expect:
+
+- The daemon reads key **press and release** from `/dev/input` (`python-evdev`,
+  read-only, never grabs the device). No compositor API exposes key release.
+- With the mode on, `local-stt setup` stops registering `Win+F` in KDE/GNOME
+  (the listener owns it) and keeps `Win+Shift+F` for history. Turning it off
+  and re-running setup restores the normal toggle shortcut.
+- A **short tap** (< `hold_min_ms`) acts as the first toggle: recording keeps
+  going and the next tap stops it.
+- If `evdev` is missing or the user cannot read `/dev/input`, the daemon keeps
+  working in toggle mode and `local-stt doctor` says exactly what is missing.
+
+> [!WARNING]
+> Membership in the `input` group lets a process read **every** keystroke,
+> which is equivalent to a keylogger. `local-stt` only looks at the chord's
+> key and modifiers, but the permission is the real boundary: restrict it with
+> `hold_devices = ["AT Translated"]` (substring of `evdev`'s device name) if you
+> prefer to trust only your physical keyboard.
 
 ## Requirements
 
@@ -367,7 +405,7 @@ Not implemented yet — documented so expectations are clear:
 |---|---|---|
 | **CI (GitHub Actions)** | ✅ done | `.github/workflows/ci.yml` runs the 93 unit tests (matrix 3.11/3.13) + `ruff check` on every push/PR. Slim deps (no GPU wheels): heavy imports are lazy, so tests only need `numpy` + `text2num` + `pytest`. |
 | **AUR / PKGBUILD** | ✅ done | `packaging/aur/` ships a source PKGBUILD (AUR deps for the Python stack, cuBLAS 12 bundled from the PyPI wheel into `/usr/lib/local-stt/cublas`). Uninstall via `pacman -R local-stt`; `local-stt uninstall` stays user-level only. |
-| **Push-to-talk (hold key)** | ❌ | Only toggle mode exists (press to start, press to stop). Hold-to-talk needs a long-running listener process per desktop shell. |
+| **Push-to-talk (hold key)** | ✅ done | `push_to_talk = true` + `python-evdev`: hold `Win+F` to record, release to transcribe. Opt-in because it needs read access to `/dev/input` (grupo `input`). See [Push-to-talk](#push-to-talk-hold-to-dictate). |
 | **Custom Spanish wake word** | ❌ | openWakeWord ships English-trained models ("hey jarvis", "alexa"…). A custom "oye computadora" requires training a model (synthetic TTS data + fine-tune). |
 | **Wayland-native OSD** | partial | The floating indicator runs via XWayland (`DISPLAY`). Works, but a native layer-shell client (Qt/GTK) would survive XWayland-less sessions. |
 | **Exact window detection on KDE** | partial | Requires `kdotool` (AUR). The built-in KWin DBus fallback works but is best-effort and slower (see *Contextual vocabulary*). |

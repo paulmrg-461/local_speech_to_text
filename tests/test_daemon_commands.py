@@ -25,6 +25,7 @@ def _daemon(tmp_path) -> Daemon:
     d._lock = threading.Lock()
     d._recording_origin = None
     d.hold_status = "off"
+    d.hold_listener = None
     d._partial_text = ""
     d._sock_path = tmp_path / "local-stt.sock"
     d.calls: list[str] = []

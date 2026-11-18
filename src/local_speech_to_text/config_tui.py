@@ -35,6 +35,9 @@ _MENU = [
     ("streaming", "Streaming (dictados largos)", "bool", None),
     ("wake_word", "Wake word (hey jarvis)", "bool", None),
     ("wake_word_model", "Modelo wake word", "str", None),
+    ("push_to_talk", "Push-to-talk (mantener tecla)", "bool", None),
+    ("hold_key", "Tecla hold (super+f)", "str", None),
+    ("hold_min_ms", "Tap mínimo para hold (ms)", "int", None),
 ]
 
 _ORDER = [k for k, *_ in _MENU] + ["stream_window", "partial_interval", "wake_word_threshold", "sample_rate"]

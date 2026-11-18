@@ -1,5 +1,8 @@
 # Tareas — Push-to-talk
 
+> **Estado (2026-11-18):** T1-T10 implementadas y con tests. Queda la prueba
+> manual con teclado real tras `usermod -aG input` (no ejecutable en CI).
+
 Atómicas y ordenadas. Ninguna se implementa sin aprobar esta lista (fase 4).
 Cada una incluye sus tests (éxito / fallo / seguridad cuando aplique).
 

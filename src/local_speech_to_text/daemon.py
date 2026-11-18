@@ -76,6 +76,7 @@ class Daemon:
         with self._lock:
             if not self.recorder.is_recording:
                 self._recording_origin = "toggle"
+                self._notify_hold_started("toggle")
                 self._start_recording()
             else:
                 self._stop_and_transcribe()
@@ -86,6 +87,7 @@ class Daemon:
             if self.recorder.is_recording:
                 return False
             self._recording_origin = origin
+            self._notify_hold_started(origin)
             self._start_recording()
             return True
 
@@ -96,6 +98,50 @@ class Daemon:
                 return False
             self._stop_and_transcribe()
             return True
+
+    def _notify_hold_started(self, origin: str) -> None:
+        if self.hold_listener is not None:
+            self.hold_listener.machine.notify_recording_started(origin)
+
+    def _notify_hold_stopped(self) -> None:
+        if self.hold_listener is not None:
+            self.hold_listener.machine.notify_recording_stopped()
+
+    def _set_hold_status(self, status: str) -> None:
+        self.hold_status = status
+
+    def _start_hold_listener(self) -> None:
+        """Push-to-talk opcional: mantiene un hilo leyendo /dev/input (evdev)."""
+        if not self.config.push_to_talk:
+            self.hold_status = "off"
+            return
+        if self.hold_listener is not None:
+            return
+        from .hotkey_hold import HotkeyListener, parse_chord
+
+        chord = parse_chord(self.config.hold_key)
+        if chord is None:
+            self.hold_status = "bad-chord"
+            print(f"[hold] hold_key inválido: {self.config.hold_key!r} (usa p. ej. 'super+f')")
+            return
+        listener = HotkeyListener(
+            chord,
+            min_ms=self.config.hold_min_ms,
+            allowlist=self.config.hold_devices,
+            on_start=lambda: self.start_recording("hold"),
+            on_stop=self.stop_recording,
+            on_status=self._set_hold_status,
+        )
+        if listener.start():
+            self.hold_listener = listener
+        self.hold_status = listener.status
+
+    def _stop_hold_listener(self) -> None:
+        if self.hold_listener is not None:
+            self.hold_listener.stop()
+            self.hold_listener = None
+        if not self.config.push_to_talk:
+            self.hold_status = "off"
 
     def _maybe_start_wake_word(self) -> None:
         """Arranca el monitor de wake word si config.wake_word está activo."""
@@ -121,6 +167,7 @@ class Daemon:
         with self._lock:
             if not self.recorder.is_recording:
                 self._recording_origin = "wake"
+                self._notify_hold_started("wake")
                 self._start_recording()
 
     def _stop_wake_word(self) -> None:
@@ -291,6 +338,7 @@ class Daemon:
         recording = self.recorder.stop()
         self._partial_text = ""
         self._recording_origin = None
+        self._notify_hold_stopped()
         if self.wake_monitor:
             self.wake_monitor.resume()
         play_sound("stop")
@@ -393,6 +441,13 @@ class Daemon:
         elif not new.wake_word and self.wake_monitor:
             print("[daemon] Wake word desactivado")
             self._stop_wake_word()
+        # push-to-talk: aplicar cambios de modo/chord/devices al vuelo
+        old_hold = (old.push_to_talk, old.hold_key, old.hold_min_ms, tuple(old.hold_devices))
+        new_hold = (new.push_to_talk, new.hold_key, new.hold_min_ms, tuple(new.hold_devices))
+        if old_hold != new_hold:
+            self._stop_hold_listener()
+            self._start_hold_listener()
+            print(f"[daemon] push-to-talk: {self.hold_status}")
         return f"ok recargado: model={new.model} lang={new.language or 'auto'}"
 
     # --- Socket IPC para toggle desde atajo ---
@@ -497,9 +552,11 @@ class Daemon:
         self._server_thread.start()
 
         self._maybe_start_wake_word()
+        self._start_hold_listener()
 
-        notify("Local STT", f"Daemon listo. Presiona Win+F para dictar ({self.config.model} en {self.config.device})")
-        print(f"[daemon] Listo. Modelo {self.config.model} en {self.config.device}. Presiona Win+F (o: local-stt toggle)")
+        modo = f"mantén {self.config.hold_key}" if self.config.push_to_talk else "presiona Win+F"
+        notify("Local STT", f"Daemon listo. {modo.capitalize()} para dictar ({self.config.model} en {self.config.device})")
+        print(f"[daemon] Listo. Modelo {self.config.model} en {self.config.device}. {modo.capitalize()} (o: local-stt toggle)")
         print(f"[daemon] Socket: {self._sock_path} | PID: {os.getpid()}")
         try:
             while self._running:
@@ -514,6 +571,7 @@ class Daemon:
         self._running = False
         self._kill_osd()
         self._stop_wake_word()
+        self._stop_hold_listener()
         if self.recorder.is_recording:
             try:
                 self.recorder.stop()

@@ -299,6 +299,53 @@ def _check_system_deps() -> bool:
     return True
 
 
+def _input_group_ok(group_ids: list[int] | None = None, input_gid: int | None = None) -> bool:
+    """True si el proceso puede leer /dev/input (root o grupo `input`)."""
+    if os.geteuid() == 0:
+        return True
+    if group_ids is None:
+        group_ids = os.getgroups()
+    if input_gid is None:
+        import grp
+
+        try:
+            input_gid = grp.getgrnam("input").gr_gid
+        except KeyError:
+            return False
+    return input_gid in set(group_ids)
+
+
+INPUT_GROUP_HINT = (
+    "Añade tu usuario al grupo input: sudo usermod -aG input $USER y re-loguea. "
+    "Ojo: el grupo input permite leer TODO el teclado (equivale a un keylogger); "
+    "limita con hold_devices = [\"nombre del teclado\"]."
+)
+
+
+def _hold_device_hint() -> str:
+    """Primer teclado legible, o el motivo por el que no se puede abrir."""
+    try:
+        import evdev
+        from evdev import ecodes
+
+        for path in evdev.list_devices():
+            try:
+                dev = evdev.InputDevice(path)
+            except PermissionError:
+                return "sin permiso para /dev/input/event*"
+            except Exception:
+                continue
+            try:
+                caps = dev.capabilities().get(ecodes.EV_KEY, [])
+                if ecodes.KEY_F in caps:
+                    return f"{dev.name} ({path})"
+            finally:
+                dev.close()
+        return "ningún teclado detectado"
+    except ImportError:
+        return "falta python-evdev"
+
+
 def cmd_setup(args):
     """Puesta en marcha total: deps -> modelo -> atajos -> servicio -> doctor -> chuleta."""
 
@@ -334,6 +381,10 @@ def cmd_setup(args):
     hotkey = _hotkey_script()
     if hotkey is not None:
         env = {**os.environ, "LOCAL_STT_DESKTOP": "auto"}
+        if cfg.push_to_talk:
+            # El listener evdev gestiona Win+F (press y release); si el
+            # compositor también lo lanzara, el dictado se pararía solo.
+            env["LOCAL_STT_SKIP_TOGGLE"] = "1"
         r = subprocess.run(["bash", str(hotkey)], env=env, timeout=60,
                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         print("   ✅ registrados" if r.returncode == 0 else
@@ -671,11 +722,40 @@ def cmd_doctor(args):
     except ImportError:
         _check(False, "Wake word", "", "Opcional. Instala: .venv/bin/pip install 'local-speech-to-text[wakeword]'", warn=True)
 
+    # 5d. Push-to-talk (opcional: mantener la tecla para dictar)
+    if not cfg.push_to_talk:
+        _check(True, "Push-to-talk", "desactivado (modo toggle)", "")
+    else:
+        from .hotkey_hold import parse_chord
+
+        chord = parse_chord(cfg.hold_key)
+        failures += not _check(chord is not None, "Hold chord", cfg.hold_key,
+                               "hold_key inválido: usa p. ej. 'super+f'")
+        ok_group = _input_group_ok()
+        failures += not _check(ok_group, "Grupo input",
+                               "usuario en grupo input" if ok_group else "usuario FUERA del grupo input",
+                               INPUT_GROUP_HINT, warn=True)
+        device = _hold_device_hint()
+        readable = not device.startswith(("sin permiso", "falta", "ningún"))
+        failures += not _check(readable, "Teclado evdev", device,
+                               "Sin lectura de /dev/input no hay hold", warn=True)
+        if not cfg.hold_devices:
+            _check(True, "Allowlist", "vacía: escucha todos los teclados",
+                   "Considera hold_devices = [\"tu teclado\"] (ver README)")
+        if cfg.socket_path.exists():
+            status = send_command("status", cfg.socket_path)
+            hold = status.split("hold=")[-1].split()[0] if "hold=" in status else "?"
+            failures += not _check(hold == "running", "Hold listener", hold,
+                                   "Reinicia el daemon: systemctl --user restart local-stt", warn=True)
+
     # 6. Atajo
-    hotkey = (Path.home() / ".config" / "khotkeysrc")
-    configured = hotkey.exists() and "Local STT" in hotkey.read_text()
-    failures += not _check(configured, "Atajo Win+F", "configurado en khotkeysrc",
-                           "Ejecuta: local-stt setup", warn=True)
+    if cfg.push_to_talk:
+        _check(True, "Atajo Win+F", f"gestionado por push-to-talk ({cfg.hold_key})", "")
+    else:
+        hotkey = (Path.home() / ".config" / "khotkeysrc")
+        configured = hotkey.exists() and "Local STT" in hotkey.read_text()
+        failures += not _check(configured, "Atajo Win+F", "configurado en khotkeysrc",
+                               "Ejecuta: local-stt setup", warn=True)
 
     # 7. Micrófono
     try:

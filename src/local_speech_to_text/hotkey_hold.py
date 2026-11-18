@@ -9,6 +9,7 @@ Diseño: docs/specs/push-to-talk/design.md
 
 from __future__ import annotations
 
+import threading
 import time
 from dataclasses import dataclass, field
 from typing import Callable
@@ -171,3 +172,216 @@ class HoldStateMachine:
     def _emit(callback: Callable[[], None] | None) -> None:
         if callback is not None:
             callback()
+
+
+@dataclass(frozen=True)
+class KeyEvent:
+    """Evento normalizado de un teclado (nunca se registran códigos ajenos)."""
+
+    key: str  # "KEY_F"
+    value: int  # 1 press, 0 release, 2 auto-repeat
+    device: str = ""
+
+
+def device_matches(name: str, allowlist: tuple[str, ...] | list[str] = ()) -> bool:
+    """True si el nombre del teclado pasa la allowlist (substring, sin mayúsculas)."""
+    if not allowlist:
+        return True
+    low = (name or "").lower()
+    return any(entry.lower() in low for entry in allowlist if entry)
+
+
+class EventSource:
+    """Interfaz mínima para poder testear sin evdev."""
+
+    def open(self) -> str | None:  # None = ok; si no, motivo
+        raise NotImplementedError
+
+    def poll(self, timeout: float) -> list[KeyEvent]:
+        raise NotImplementedError
+
+    def close(self) -> None:
+        raise NotImplementedError
+
+
+class EvdevSource(EventSource):
+    """Lee `/dev/input/event*` en solo lectura (sin EVIOCGRAB).
+
+    Requiere el extra `[hold]` (python-evdev) y permiso de lectura: el usuario
+    debe pertenecer al grupo `input`.
+    """
+
+    def __init__(self, watched_keys: set[str], allowlist: tuple[str, ...] | list[str] = ()):
+        self._watched = watched_keys
+        self._allowlist = tuple(allowlist)
+        self._devices: dict[str, object] = {}
+        self._codes: set[int] = set()
+        self._last_scan = 0.0
+        self._evdev = None
+        self._ecodes = None
+
+    def open(self) -> str | None:
+        try:
+            import evdev
+            from evdev import ecodes
+        except ImportError:
+            return "no-evdev"
+        self._evdev = evdev
+        self._ecodes = ecodes
+        self._codes = {getattr(ecodes, name) for name in self._watched if hasattr(ecodes, name)}
+        denied = self._discover()
+        if not self._devices:
+            return "no-permission" if denied else "no-devices"
+        return None
+
+    def _discover(self) -> bool:
+        """Abre teclados nuevos. Devuelve True si alguno dio PermissionError."""
+        denied = False
+        for path in self._evdev.list_devices():
+            if path in self._devices:
+                continue
+            try:
+                dev = self._evdev.InputDevice(path)
+            except PermissionError:
+                denied = True
+                continue
+            except Exception:
+                continue
+            try:
+                if not device_matches(dev.name or "", self._allowlist):
+                    dev.close()
+                    continue
+                caps = dev.capabilities().get(self._ecodes.EV_KEY, [])
+                if not ({self._ecodes.KEY_F, self._ecodes.KEY_A} & set(caps)):
+                    dev.close()
+                    continue
+            except Exception:
+                try:
+                    dev.close()
+                except Exception:
+                    pass
+                continue
+            self._devices[path] = dev
+            print(f"[hold] teclado: {dev.name} ({path})")
+        return denied
+
+    def _drop(self, path: str) -> None:
+        dev = self._devices.pop(path, None)
+        if dev is not None:
+            try:
+                dev.close()
+            except Exception:
+                pass
+
+    def poll(self, timeout: float) -> list[KeyEvent]:
+        from select import select
+
+        if not self._devices:
+            return []
+        events: list[KeyEvent] = []
+        try:
+            readable, _, _ = select(list(self._devices.values()), [], [], timeout)
+        except (OSError, ValueError):
+            readable = []
+        for dev in readable:
+            try:
+                batch = dev.read()
+            except OSError:  # desconectado
+                self._drop(dev.path)
+                continue
+            for ev in batch:
+                if ev.type != self._ecodes.EV_KEY or ev.code not in self._codes:
+                    continue
+                name = self._ecodes.KEY.get(ev.code, "")
+                if name:
+                    events.append(KeyEvent(name, ev.value, dev.name or ""))
+        # Hotplug: los event* cambian al reconectar teclados.
+        now = time.monotonic()
+        if now - self._last_scan > 5.0:
+            self._last_scan = now
+            self._discover()
+        return events
+
+    def close(self) -> None:
+        for path in list(self._devices):
+            self._drop(path)
+
+
+class HotkeyListener:
+    """Hilo que traduce press/release del chord en start/stop del dictado."""
+
+    def __init__(
+        self,
+        chord: HoldChord,
+        min_ms: int = 200,
+        allowlist: tuple[str, ...] | list[str] = (),
+        on_start: Callable[[], None] | None = None,
+        on_stop: Callable[[], None] | None = None,
+        source: EventSource | None = None,
+        on_status: Callable[[str], None] | None = None,
+    ):
+        self.chord = chord
+        self.machine = HoldStateMachine(chord, min_ms=min_ms, on_start=on_start, on_stop=on_stop)
+        self._source = source or EvdevSource(
+            watched_keys={chord.key, *MODIFIER_KEYS}, allowlist=allowlist
+        )
+        self._on_status = on_status
+        self._mods: set[str] = set()
+        self._stop = threading.Event()
+        self._thread = None
+        self.status = "stopped"
+
+    def _set_status(self, status: str) -> None:
+        self.status = status
+        if self._on_status is not None:
+            self._on_status(status)
+
+    def start(self) -> bool:
+        reason = self._source.open()
+        if reason:
+            self._set_status(reason)
+            print(f"[hold] push-to-talk no disponible: {reason}")
+            return False
+        self._set_status("running")
+        self._thread = threading.Thread(target=self._loop, daemon=True)
+        self._thread.start()
+        print(f"[hold] push-to-talk activo: mantén {self.chord.text} para dictar")
+        return True
+
+    def handle_event(self, event: KeyEvent) -> None:
+        """Procesa un evento. Filtra auto-repeat y códigos no vigilados (RS-2)."""
+        if event.value == 2:
+            return
+        if event.key in MODIFIER_KEYS:
+            group = MODIFIER_KEYS[event.key]
+            if event.value == 0:
+                self._mods.discard(group)
+                # Soltar el modificador antes que la tecla también termina el hold.
+                if self.machine.state == ARMED and not self.chord.matches(self.chord.key, self._mods):
+                    self.machine.release()
+            else:
+                self._mods.add(group)
+            return
+        if event.key != self.chord.key:
+            return
+        if event.value == 1 and self.chord.matches(event.key, self._mods):
+            self.machine.press()
+        elif event.value == 0:
+            self.machine.release()
+
+    def _loop(self) -> None:
+        while not self._stop.is_set():
+            try:
+                for event in self._source.poll(0.5):
+                    self.handle_event(event)
+            except Exception as e:  # un fallo no debe tumbar el daemon
+                print(f"[hold] error leyendo teclado: {e}")
+                self._stop.wait(1.0)
+
+    def stop(self) -> None:
+        self._stop.set()
+        if self._thread is not None:
+            self._thread.join(timeout=2)
+            self._thread = None
+        self._source.close()
+        self._set_status("stopped")
