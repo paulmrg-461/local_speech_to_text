@@ -43,6 +43,9 @@ class Daemon:
         self._stream_text = ""  # segmentos ya transcritos (dictados largos)
         self._stream_processed = 0  # muestras ya confirmadas
         self.wake_monitor = None  # WakeWordMonitor | None
+        self.hold_listener = None  # HotkeyListener | None (push-to-talk)
+        self.hold_status = "off"  # off | waiting | running | no-permission | no-evdev | bad-chord
+        self._recording_origin: str | None = None  # toggle|wake|hold|socket
         self.translate_mode = False  # dictar en un idioma -> salir en inglés
 
     def _ensure_model(self):
@@ -72,9 +75,27 @@ class Daemon:
     def toggle(self):
         with self._lock:
             if not self.recorder.is_recording:
+                self._recording_origin = "toggle"
                 self._start_recording()
             else:
                 self._stop_and_transcribe()
+
+    def start_recording(self, origin: str = "socket") -> bool:
+        """Arranca si está idle. Idempotente: grabando no reinicia (RF-6)."""
+        with self._lock:
+            if self.recorder.is_recording:
+                return False
+            self._recording_origin = origin
+            self._start_recording()
+            return True
+
+    def stop_recording(self) -> bool:
+        """Para si graba. Idempotente: en idle no hace nada (RF-6)."""
+        with self._lock:
+            if not self.recorder.is_recording:
+                return False
+            self._stop_and_transcribe()
+            return True
 
     def _maybe_start_wake_word(self) -> None:
         """Arranca el monitor de wake word si config.wake_word está activo."""
@@ -99,6 +120,7 @@ class Daemon:
         """Llamado desde el hilo del monitor: arranca dictado si no hay ya uno."""
         with self._lock:
             if not self.recorder.is_recording:
+                self._recording_origin = "wake"
                 self._start_recording()
 
     def _stop_wake_word(self) -> None:
@@ -246,6 +268,7 @@ class Daemon:
             "elapsed": round(self.recorder.elapsed, 1),
             "rms": round(self.recorder.current_rms, 5),
             "partial": self._partial_text,
+            "hold": self.hold_status,
         })
 
     def toggle_translate(self) -> str:
@@ -267,6 +290,7 @@ class Daemon:
         self._kill_osd()
         recording = self.recorder.stop()
         self._partial_text = ""
+        self._recording_origin = None
         if self.wake_monitor:
             self.wake_monitor.resume()
         play_sound("stop")
@@ -292,7 +316,6 @@ class Daemon:
             print("[daemon] Transcripción vacía")
             return
 
-        self._save_history(text)
         self._save_history(text, duration)
         print(f"[daemon] ✅ Texto: {text}")
         ok = copy_to_clipboard(text)
@@ -373,6 +396,38 @@ class Daemon:
         return f"ok recargado: model={new.model} lang={new.language or 'auto'}"
 
     # --- Socket IPC para toggle desde atajo ---
+    def _handle_command(self, data: str) -> str:
+        """Procesa un comando IPC y devuelve la respuesta (sin socket).
+
+        `start`/`stop` son idempotentes: repetirlos no cambia el estado.
+        """
+        if data == "start":
+            self.start_recording("socket")
+            return "ok"
+        if data == "stop":
+            self.stop_recording()
+            return "ok"
+        if data in ("toggle", ""):
+            self.toggle()
+            return "ok"
+        if data == "reload":
+            try:
+                return self.reload_config()
+            except Exception as e:
+                return f"error: {e}"
+        if data == "translate":
+            try:
+                return self.toggle_translate()
+            except Exception as e:
+                return f"error: {e}"
+        if data == "status":
+            state = "recording" if self.recorder.is_recording else "idle"
+            origin = self._recording_origin or "-"
+            return f"{state} origin={origin} hold={self.hold_status}"
+        if data == "level":
+            return self._level_payload()
+        return "unknown"
+
     def _serve(self):
         if self._sock_path.exists():
             try:
@@ -382,9 +437,10 @@ class Daemon:
         srv = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         srv.bind(str(self._sock_path))
         srv.listen(5)
-        # permisos
+        # Solo el dueño del daemon: otro usuario local no debe arrancar el micro
+        # ni parar el dictado.
         try:
-            os.chmod(self._sock_path, 0o777)
+            os.chmod(self._sock_path, 0o600)
         except Exception:
             pass
         print(f"[daemon] Socket en {self._sock_path} - atajo: local-stt toggle")
@@ -401,33 +457,11 @@ class Daemon:
             with conn:
                 try:
                     data = conn.recv(1024).decode().strip()
-                    if data == "start":
-                        if not self.recorder.is_recording:
-                            self.toggle()
-                        conn.sendall(b"ok\n")
-                    elif data in ("stop", "toggle", ""):
-                        self.toggle()
-                        conn.sendall(b"ok\n")
-                    elif data == "reload":
-                        try:
-                            conn.sendall((self.reload_config() + "\n").encode())
-                        except Exception as e:
-                            conn.sendall(f"error: {e}\n".encode())
-                    elif data == "translate":
-                        try:
-                            conn.sendall((self.toggle_translate() + "\n").encode())
-                        except Exception as e:
-                            conn.sendall(f"error: {e}\n".encode())
-                    elif data == "status":
-                        state = "recording" if self.recorder.is_recording else "idle"
-                        conn.sendall(f"{state}\n".encode())
-                    elif data == "level":
-                        conn.sendall((self._level_payload() + "\n").encode())
-                    elif data == "quit":
+                    if data == "quit":
                         conn.sendall(b"bye\n")
                         self.stop()
-                    else:
-                        conn.sendall(b"unknown\n")
+                        continue
+                    conn.sendall((self._handle_command(data) + "\n").encode())
                 except Exception as e:
                     print(f"[daemon] handle error: {e}")
         try:

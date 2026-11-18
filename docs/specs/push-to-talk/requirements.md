@@ -18,8 +18,14 @@ sistema shall parar y transcribir en ≤200 ms.
 
 **RF-3 (tap)**
 Si la tecla se mantiene menos de `hold_min_ms` (200 ms), entonces el sistema
-shall tratar la pulsación como `toggle`.
-*Criterio:* `start` + `stop` con Δt=120 ms emite `toggle`, no `start`+`stop`.
+shall tratar la pulsación como el primer `toggle`: la grabación sigue activa
+y el siguiente tap la detiene.
+*Criterio:* `press`+`release` con Δt=120 ms emite `start` (una vez) y ningún
+`stop`; un segundo tap emite `stop`.
+
+> Ajuste respecto a la v1: el `start` es inmediato en el press (RF-1), así
+> que un tap no puede emitir un único `toggle` sin parar la grabación recién
+> iniciada. El comportamiento observable es el mismo (toque = dictar).
 
 **RF-4 (auto-repeat)**
 Mientras la tecla siga pulsada, el sistema shall ignorar eventos con

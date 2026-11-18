@@ -52,6 +52,11 @@ _ENV_MAP = {
     "streaming": "LOCAL_STT_STREAMING",
     "stream_window": "LOCAL_STT_STREAM_WINDOW",
     "mic": "LOCAL_STT_MIC",
+    # push-to-talk (mantener tecla para dictar)
+    "push_to_talk": "LOCAL_STT_PUSH_TO_TALK",
+    "hold_key": "LOCAL_STT_HOLD_KEY",
+    "hold_min_ms": "LOCAL_STT_HOLD_MIN_MS",
+    "hold_devices": "LOCAL_STT_HOLD_DEVICES",
 }
 
 _DEFAULTS = {
@@ -79,6 +84,11 @@ _DEFAULTS = {
     "stream_window": 12.0,  # segundos por ventana confirmada
     "mic": None,  # nombre del micro (substring); None = default del sistema
     "auto_copy": True,
+    # push-to-talk: mantener hold_key graba, soltar transcribe (requiere evdev)
+    "push_to_talk": False,
+    "hold_key": "super+f",
+    "hold_min_ms": 200,  # por debajo se considera tap (primer toggle)
+    "hold_devices": [],  # nombres (substring) de teclados; [] = todos
 }
 
 # Paths por defecto de vocabulario/correcciones (XDG)
@@ -129,6 +139,11 @@ class Config:
     streaming: bool = True  # dictados largos: confirma ventanas, al parar solo transcribe la cola
     stream_window: float = 12.0
     mic: str | None = None  # substring del nombre del micro; None = default
+    # push-to-talk: mantener hold_key graba; soltar transcribe (extra [hold])
+    push_to_talk: bool = False
+    hold_key: str = "super+f"
+    hold_min_ms: int = 200
+    hold_devices: list[str] = field(default_factory=list)
     # {regex de ventana: archivo de vocabulario} — vocabulario contextual por app
     app_vocab: dict[str, str] = field(default_factory=dict)
     vocabulary_file: Path = _default_vocab_path()
@@ -151,11 +166,18 @@ class Config:
         for key in ("vocabulary_file", "corrections_file"):
             if key in data and data[key] is not None:
                 data[key] = Path(data[key]).expanduser()
+        if isinstance(data.get("hold_devices"), str):
+            data["hold_devices"] = [d.strip() for d in data["hold_devices"].split(",") if d.strip()]
+        try:
+            hold_min = int(data.get("hold_min_ms", 200))
+            data["hold_min_ms"] = hold_min if hold_min >= 0 else 200
+        except (TypeError, ValueError):
+            data["hold_min_ms"] = 200
         return cls(**{k: v for k, v in data.items() if k in {f.name for f in fields(cls)}})
 
 
 # Claves de texto plano (evita que caigan en la rama bool del parser de env)
-_STR_KEYS = {"language", "model", "device", "compute_type", "mic", "wake_word_model"}
+_STR_KEYS = {"language", "model", "device", "compute_type", "mic", "wake_word_model", "hold_key"}
 
 
 def _apply_env(data: dict) -> None:
@@ -167,6 +189,11 @@ def _apply_env(data: dict) -> None:
             data[key] = None if key == "language" and raw == "auto" else raw
         elif key in ("beam_size", "max_record_seconds", "silence_threshold_ms"):
             data[key] = int(raw)
+        elif key == "hold_min_ms":
+            value = int(raw)
+            data[key] = value if value >= 0 else 200
+        elif key == "hold_devices":
+            data[key] = [d.strip() for d in raw.split(",") if d.strip()]
         elif key == "silence_rms":
             data[key] = float(raw)
         elif key == "partial_interval":
