@@ -1,11 +1,11 @@
 post_install() {
   echo ""
   echo "local-stt instalado. Próximos pasos:"
-  echo "  1. systemctl --user enable --now local-stt"
-  echo "  2. local-stt setup   (atajo Win+F + config inicial)"
-  echo "  3. local-stt doctor  (diagnóstico: GPU, mic, clipboard)"
+  echo "  1. local-stt setup   (modelo, atajo Win+F, servicio systemd --user)"
+  echo "  2. local-stt doctor  (diagnóstico: GPU, mic, clipboard)"
   echo ""
   echo "Config: ~/.config/local-stt/config.toml (model = large-v3-turbo por defecto)"
+  echo "KDE Plasma 6: cierra sesión y vuelve a entrar para que Win+F aplique."
 }
 
 post_upgrade() {

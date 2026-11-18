@@ -14,6 +14,36 @@ from .daemon import Daemon, send_command
 from .recorder import AudioRecorder
 
 SERVICE = "local-stt.service"
+# Instalación empaquetada (pacman/AUR): binario y assets fuera del repo.
+SHARE_DIR = Path("/usr/share/local-stt")
+SYSTEM_UNIT_DIR = Path("/usr/lib/systemd/user")
+
+
+def _repo_root() -> Path:
+    return Path(__file__).resolve().parents[2]
+
+
+def _hotkey_script(repo_root: Path | None = None, share_dir: Path | None = None) -> Path | None:
+    """setup-hotkey.sh del repo (venv) o de /usr/share/local-stt (pacman/AUR)."""
+    bases = ((repo_root or _repo_root()) / "scripts", share_dir or SHARE_DIR)
+    for base in bases:
+        script = base / "setup-hotkey.sh"
+        if script.exists():
+            return script
+    return None
+
+
+def _user_unit() -> Path:
+    return Path.home() / ".config" / "systemd" / "user" / SERVICE
+
+
+def _system_unit(system_dir: Path | None = None) -> Path:
+    return (system_dir or SYSTEM_UNIT_DIR) / SERVICE
+
+
+def _service_installed(user_unit: Path | None = None, system_unit: Path | None = None) -> bool:
+    """True si el unit existe en ~/.config (venv) o en /usr/lib (paquete)."""
+    return (user_unit or _user_unit()).exists() or (system_unit or _system_unit()).exists()
 
 
 def _config_from_args(args) -> Config:
@@ -34,8 +64,7 @@ def _autostart_daemon(cfg: Config) -> bool:
     empiece a grabar (o como mucho muestre que el modelo está cargando).
     """
     try:
-        unit = Path.home() / ".config" / "systemd" / "user" / SERVICE
-        if unit.exists():
+        if _service_installed():
             subprocess.run(
                 ["systemctl", "--user", "start", SERVICE],
                 check=True, timeout=10,
@@ -279,7 +308,6 @@ def cmd_setup(args):
         _sys.stdout.reconfigure(line_buffering=True)
     except Exception:
         pass
-    repo = Path(__file__).resolve().parents[2]
     cfg = _config_from_args(args)
     print("=" * 62)
     print("  local-stt setup — puesta en marcha asistida")
@@ -303,8 +331,8 @@ def cmd_setup(args):
 
     # 3) atajos de teclado
     print("\n[3/5] Atajos (Win+F dictar, Win+Shift+F historial)")
-    hotkey = repo / "scripts" / "setup-hotkey.sh"
-    if hotkey.exists():
+    hotkey = _hotkey_script()
+    if hotkey is not None:
         env = {**os.environ, "LOCAL_STT_DESKTOP": "auto"}
         r = subprocess.run(["bash", str(hotkey)], env=env, timeout=60,
                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -312,16 +340,16 @@ def cmd_setup(args):
               "   ⚠️  no se pudieron registrar: configúralos en Ajustes → Atajos")
         print("      (KDE: cierra sesión y entra de nuevo para que apliquen)")
     else:
-        print(f"   ⚠️  {hotkey} no encontrado: registra el atajo a mano")
+        print("   ⚠️  setup-hotkey.sh no encontrado: registra el atajo a mano")
 
     # 4) servicio systemd
     print("\n[4/5] Servicio systemd --user")
-    unit_dst = Path.home() / ".config" / "systemd" / "user" / "local-stt.service"
-    unit_src = repo / "systemd" / "local-stt.service"
-    if not unit_dst.exists() and unit_src.exists():
+    unit_dst = _user_unit()
+    unit_src = _repo_root() / "systemd" / SERVICE
+    if not _service_installed() and unit_src.exists():
         unit_dst.parent.mkdir(parents=True, exist_ok=True)
         unit_dst.write_text(unit_src.read_text().replace("%h", str(Path.home())))
-    if unit_dst.exists():
+    if _service_installed():
         subprocess.run(["systemctl", "--user", "daemon-reload"], timeout=15)
         subprocess.run(["systemctl", "--user", "enable", "--now", "local-stt"], timeout=30)
         for _ in range(60):
@@ -330,7 +358,7 @@ def cmd_setup(args):
             time.sleep(0.5)
         print("   ✅ daemon activo" if cfg.socket_path.exists() else "   ⚠️  arrancando lento: revisa 'local-stt doctor'")
     else:
-        print("   ⚠️  sin unit systemd; corre '.venv/bin/local-stt daemon' manualmente")
+        print("   ⚠️  sin unit systemd; corre 'local-stt daemon' manualmente")
 
     # 5) doctor + chuleta
     print("\n[5/5] Diagnóstico")
@@ -376,7 +404,10 @@ def _strip_gnome_bindings(existing: str) -> str:
 
 def cmd_update(args):
     """Auto-actualiza: git pull -> pip install -e . -> tests -> restart daemon."""
-    repo = Path(__file__).resolve().parents[2]
+    if is_packaged_install():
+        print("Instalación empaquetada (pacman/AUR): actualiza con 'sudo pacman -Syu' o 'yay -Syu'.")
+        return
+    repo = _repo_root()
     def git(*a):
         return subprocess.run(["git", "-C", str(repo), *a], capture_output=True, text=True, timeout=120)
 
@@ -567,11 +598,17 @@ def cmd_doctor(args):
         failures += not _check(n > 0, "CUDA (ctranslate2)", f"{n} dispositivo CUDA", "No hay CUDA: irá a CPU (lento)")
     except Exception as e:
         failures += not _check(False, "CUDA (ctranslate2)", "", f"error importando: {e}")
-    from .cuda_libs import nvidia_pip_dir
+    from .cuda_libs import PACKAGED_CUBLAS_DIR, nvidia_pip_dir
 
     nv = nvidia_pip_dir()
-    failures += not _check((nv / "cublas" / "lib" / "libcublas.so.12").exists(), "cuBLAS 12 (pip)",
-                           f"{nv}", "Falta nvidia-cublas-cu12: .venv/bin/pip install nvidia-cublas-cu12")
+    pip_lib = nv / "cublas" / "lib" / "libcublas.so.12"
+    pkg_lib = PACKAGED_CUBLAS_DIR / "libcublas.so.12"
+    failures += not _check(
+        pip_lib.exists() or pkg_lib.exists(),
+        "cuBLAS 12",
+        str(pip_lib if pip_lib.exists() else pkg_lib),
+        "Falta cuBLAS 12: instala nvidia-cublas-cu12 (venv) o el paquete local-stt (AUR)",
+    )
 
     # 3. Daemon
     failures += not _check(cfg.socket_path.exists(), "Daemon", "corriendo",
@@ -638,7 +675,7 @@ def cmd_doctor(args):
     hotkey = (Path.home() / ".config" / "khotkeysrc")
     configured = hotkey.exists() and "Local STT" in hotkey.read_text()
     failures += not _check(configured, "Atajo Win+F", "configurado en khotkeysrc",
-                           "Ejecuta: ./scripts/setup-hotkey.sh", warn=True)
+                           "Ejecuta: local-stt setup", warn=True)
 
     # 7. Micrófono
     try:

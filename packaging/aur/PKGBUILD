@@ -19,17 +19,27 @@ depends=(
   python-faster-whisper   # trae python-ctranslate2
   python-sounddevice
   python-text2num
-  # Sistema: clipboard, notificaciones, tipeo Wayland
+  # Sistema: audio, clipboard y notificaciones
   portaudio
   wl-clipboard
   libnotify
-  wtype
-  ydotool
 )
-makedepends=(python-build python-installer python-hatchling)
 optdepends=(
-  'python-openwakeword: manos libres con wake word ("hey jarvis")'
+  'wtype: pegar con Ctrl+V en Wayland (KDE/GNOME)'
+  'ydotool: alternativa de auto-pegado (requiere ydotool.service)'
+  'xdotool: auto-pegado en X11'
+  'wofi: selector de historial (Win+Shift+F)'
+  'kdotool: ventana activa exacta en KDE (AUR)'
+  'python-openwakeword: manos libres con wake word "hey jarvis" (AUR)'
+  'python-onnxruntime-cpu: motor del wake word'
+  'cuda: runtime CUDA para faster-whisper'
+  'nvidia-utils: driver NVIDIA'
 )
+makedepends=(python-build python-installer python-hatchling python-wheel)
+
+# El tarball de GitHub se descomprime como <repo>-$pkgver, no <pkgname>-$pkgver.
+_repo=local_speech_to_text
+
 source=(
   "$url/archive/refs/tags/v$pkgver/$pkgname-$pkgver.tar.gz"
   "https://files.pythonhosted.org/packages/af/eb/ff4b8c503fa1f1796679dce648854d58751982426e4e4b37d6fce49d259c/nvidia_cublas_cu12-12.6.4.1-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl"
@@ -41,19 +51,24 @@ sha256sums=(
 )
 
 build() {
-  cd "$pkgname-$pkgver"
+  cd "$_repo-$pkgver"
   python -m build --wheel --no-isolation
 }
 
 package() {
-  cd "$pkgname-$pkgver"
+  cd "$_repo-$pkgver"
 
   # 1) Wheel del paquete (site-packages + /usr/bin/local-stt)
   python -m installer --destdir="$pkgdir" dist/*.whl
 
-  # 2) Unidad systemd --user con binario de sistema
-  install -Dm644 "$srcdir/local-stt.service" \
+  # 2) Unit systemd --user y script de atajos: `local-stt setup` los busca
+  #    en /usr/lib/systemd/user y /usr/share/local-stt cuando no hay repo.
+  install -Dm644 packaging/aur/local-stt.service \
     "$pkgdir/usr/lib/systemd/user/local-stt.service"
+  install -Dm755 scripts/setup-hotkey.sh \
+    "$pkgdir/usr/share/local-stt/setup-hotkey.sh"
+  install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+  install -Dm644 README.md "$pkgdir/usr/share/doc/$pkgname/README.md"
 
   # 3) cuBLAS 12 (el wheel de PyPI): ctranslate2 está compilado contra CUDA 12
   #    pero Arch instala CUDA 13; el daemon precarga estas .so.12 con ctypes

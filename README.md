@@ -63,6 +63,7 @@ against CUDA 12 — bundles the cuBLAS 12 libs from the PyPI wheel into
 
 - Python deps come from pacman/AUR (`python-faster-whisper`, `python-sounddevice`, …).
 - The systemd unit uses `ExecStart=/usr/bin/local-stt daemon`.
+- Not in the AUR yet? Build it locally: `cd packaging/aur && makepkg -si`.
 - To remove the *system* files use `sudo pacman -R local-stt`; `local-stt
   uninstall` only cleans the user-level pieces (service, hotkeys, and with
   `--purge` your config/history — it detects a packaged install and won't
