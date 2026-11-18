@@ -20,11 +20,55 @@ def _run(cmd: list[str], input_text: str | None = None, timeout: float = 2.0) ->
         return False
 
 
-def copy_to_clipboard(text: str) -> bool:
-    """Copia al portapapeles: intenta wl-copy (Wayland), luego xclip/xsel, luego pyperclip."""
+def _read_clipboard(timeout: float = 1.0) -> str | None:
+    """Lee el portapapeles para verificación (wl-paste > xclip > xsel)."""
+    for cmd in (["wl-paste", "--no-newline"], ["xclip", "-o", "-selection", "clipboard"],
+                ["xsel", "--clipboard", "--output"]):
+        if not shutil.which(cmd[0]):
+            continue
+        try:
+            r = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=timeout)
+            if r.returncode == 0:
+                return r.stdout.decode("utf-8", errors="replace")
+        except Exception:
+            continue
+    # 4) pyperclip (si no hay herramientas CLI)
+    try:
+        import pyperclip
+
+        return pyperclip.paste()
+    except Exception:
+        return None
+
+
+def _clipboard_matches(expected: str, readback: str | None) -> bool:
+    """Compara ignorando saltos de línea finales (wl-copy añade uno)."""
+    return readback is not None and readback.rstrip("\n") == expected.rstrip("\n")
+
+
+def copy_to_clipboard(text: str, verify: bool = True) -> bool:
+    """Copia al portapapeles y (por defecto) verifica leyéndolo de vuelta.
+
+    Orden: wl-copy (Wayland) → xclip → xsel → pyperclip. Con verify=True
+    reintenta una vez si la lectura no coincide y retorna False si fracasa.
+    """
     if not text:
         return False
 
+    for attempt in (1, 2) if verify else (1,):
+        ok = _copy_once(text)
+        if not ok:
+            continue
+        if not verify or _clipboard_matches(text, _read_clipboard()):
+            return True
+        print(f"[clipboard] verificación falló (intento {attempt}/2), reintentando")
+
+    print("[clipboard] fallo: el texto no llegó al portapapeles")
+    return False
+
+
+def _copy_once(text: str) -> bool:
+    """Una pasada de copia con el primer backend disponible."""
     # 1) Wayland nativo
     if shutil.which("wl-copy"):
         if _run(["wl-copy"], input_text=text):
@@ -53,7 +97,7 @@ def copy_to_clipboard(text: str) -> bool:
         print("[clipboard] pyperclip OK")
         return True
     except Exception as e:
-        print(f"[clipboard] fallo todos los métodos: {e}")
+        print(f"[clipboard] fallaron todos los métodos: {e}")
         return False
 
 
