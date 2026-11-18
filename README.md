@@ -61,6 +61,41 @@ Activo por defecto (`dictation_commands = true`). Ejemplos:
 | "signo de interrogación" | `?` |
 | "guion" / "barra" / "arroba" | `-` / `/` / `@` |
 
+### Vocabulario y correcciones
+
+Whisper reconoce mejor tus nombres/términos si se los enseñas:
+
+```bash
+local-stt vocab add 'DevPaul' 'FastAPI' 'ydotool'   # initial_prompt
+local-stt correct 'dev pablo' 'DevPaul'             # corrección post-transcripción
+local-stt vocab                                      # ver / list
+local-stt reload                                     # aplicar sin reiniciar
+```
+
+Archivos: `~/.config/local-stt/vocabulary.txt` (un término por línea) y
+`corrections.txt` (líneas `mal -> bien`).
+
+### OSD con nivel de voz y texto en vivo
+
+Al grabar aparece un indicador flotante arriba-centro: barra de nivel de tu
+voz en tiempo real (verde = te oye) + la transcripción **parcial mientras
+hablas**. Se cierra solo al parar. Desactivable:
+
+```toml
+overlay = false         # sin OSD
+partial_results = false # sin texto en vivo
+```
+
+### Recuperar dictados anteriores
+
+- **`Win+Shift+F`** → selector visual (wofi) de los últimos 20 dictados → Enter copia y pega. Requiere `sudo pacman -S wofi`.
+- `local-stt history` → listado; `local-stt history --copy 2` → copia la antepenúltima.
+
+### Cambiar config sin reiniciar
+
+Edita `~/.config/local-stt/config.toml` y ejecuta `local-stt reload`
+(modelo/idioma/vocab/correcciones al vuelo; el modelo solo se recarga si cambió).
+
 ### Atajo manual (si el script no te lo configuró)
 
 **KDE Plasma 6 (default):** **Ajustes del sistema → Atajos → Atajos personalizados → Añadir → Orden/URL**

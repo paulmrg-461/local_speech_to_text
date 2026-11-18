@@ -34,8 +34,10 @@ class AudioRecorder:
         self._stream: sd.InputStream | None = None
         self._thread: threading.Thread | None = None
         self._buffers: list[np.ndarray] = []
+        self._buf_lock = threading.Lock()
         self._start_time: float = 0
         self._last_voice_time: float = 0
+        self._current_rms: float = 0.0
 
     def _callback(self, indata, frames, time_info, status):  # noqa: ANN001
         if status:
@@ -64,9 +66,11 @@ class AudioRecorder:
                     chunk = self._queue.get(timeout=0.1)
                 except queue.Empty:
                     continue
-                self._buffers.append(chunk)
+                with self._buf_lock:
+                    self._buffers.append(chunk)
                 # RMS del chunk: si supera el umbral hay voz (para auto-stop por silencio)
                 rms = float(np.sqrt(np.mean(np.square(chunk))))
+                self._current_rms = rms
                 if rms >= self.silence_rms:
                     self._last_voice_time = time.time()
 
@@ -91,7 +95,8 @@ class AudioRecorder:
         # drenar cola restante
         while not self._queue.empty():
             try:
-                self._buffers.append(self._queue.get_nowait())
+                with self._buf_lock:
+                    self._buffers.append(self._queue.get_nowait())
             except queue.Empty:
                 break
         if not self._buffers:
@@ -116,6 +121,18 @@ class AudioRecorder:
         if not self._recording:
             return 0
         return max(0.0, (time.time() - self._last_voice_time) * 1000)
+
+    @property
+    def current_rms(self) -> float:
+        """Último RMS medido (para el indicador de nivel del OSD)."""
+        return self._current_rms
+
+    def snapshot(self, max_seconds: float = 10) -> np.ndarray:
+        """Copia thread-safe del audio grabado (últimos max_seconds)."""
+        with self._buf_lock:
+            audio = np.concatenate(self._buffers, axis=0).flatten().astype(np.float32) if self._buffers else np.zeros((0,), dtype=np.float32)
+        limit = int(max_seconds * self.sample_rate)
+        return audio[-limit:] if audio.size > limit else audio
 
     @staticmethod
     def list_devices():

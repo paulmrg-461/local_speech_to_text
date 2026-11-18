@@ -65,6 +65,9 @@ auto_paste = true
 dictation_commands = true  # "punto y coma" -> ;  "nueva línea" -> salto
 silence_stop = false       # true: para solo tras 1.5s de silencio (manos libres)
 silence_threshold_ms = 1500
+overlay = true             # OSD flotante con nivel de voz mientras grabas
+partial_results = true     # texto parcial en vivo dentro del OSD
+partial_interval = 1.5     # segundos entre parciales
 EOF
 else
   echo "   ya existe, no se toca"

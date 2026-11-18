@@ -94,6 +94,20 @@ class Transcriber:
         print(f"[transcriber] Detectado:{lang_info} -> \"{text[:120]}\"")
         return text
 
+    def transcribe_partial(self, audio: np.ndarray, sample_rate: int = 16000) -> str:
+        """Parcial rápido en vivo: beam 1, sin VAD, para feedback mientras grabas."""
+        if audio.size == 0 or self._model is None:
+            return ""
+        segments, _ = self._model.transcribe(
+            audio,
+            language=self.language,
+            beam_size=1,
+            vad_filter=False,
+            condition_on_previous_text=False,
+            initial_prompt=self.initial_prompt,
+        )
+        return " ".join(seg.text.strip() for seg in segments).strip()
+
     @staticmethod
     def available_models() -> list[str]:
         return ["tiny", "base", "small", "medium", "large-v3", "large-v3-turbo", "distil-large-v3"]

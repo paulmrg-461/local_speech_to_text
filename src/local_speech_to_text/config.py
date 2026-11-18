@@ -42,6 +42,9 @@ _ENV_MAP = {
     "vad_filter": "LOCAL_STT_VAD",
     "vocabulary_file": "LOCAL_STT_VOCAB",
     "corrections_file": "LOCAL_STT_CORRECTIONS",
+    "overlay": "LOCAL_STT_OVERLAY",
+    "partial_results": "LOCAL_STT_PARTIAL",
+    "partial_interval": "LOCAL_STT_PARTIAL_SECS",
 }
 
 _DEFAULTS = {
@@ -58,6 +61,9 @@ _DEFAULTS = {
     "silence_rms": 0.008,  # umbral de energía para "hay voz"
     "silence_threshold_ms": 1500,
     "vad_filter": True,  # VAD de faster-whisper (filtra silencios antes de transcribir)
+    "overlay": True,  # OSD flotante con nivel de voz al grabar
+    "partial_results": True,  # transcripción parcial en vivo (se muestra en el OSD)
+    "partial_interval": 1.5,  # segundos entre parciales
     "auto_copy": True,
 }
 
@@ -93,6 +99,9 @@ class Config:
     silence_rms: float = 0.008
     silence_threshold_ms: int = 1500
     vad_filter: bool = True
+    overlay: bool = True
+    partial_results: bool = True
+    partial_interval: float = 1.5
     vocabulary_file: Path = _default_vocab_path()
     corrections_file: Path = _default_corrections_path()
     socket_path: Path = Path(os.environ.get("LOCAL_STT_SOCKET", "/tmp/local-stt.sock"))
@@ -126,6 +135,8 @@ def _apply_env(data: dict) -> None:
         elif key in ("beam_size", "max_record_seconds", "silence_threshold_ms"):
             data[key] = int(raw)
         elif key == "silence_rms":
+            data[key] = float(raw)
+        elif key == "partial_interval":
             data[key] = float(raw)
         elif key in ("vocabulary_file", "corrections_file"):
             data[key] = Path(raw).expanduser()

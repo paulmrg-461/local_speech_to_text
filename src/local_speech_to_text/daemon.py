@@ -5,6 +5,8 @@ import os
 import signal
 import socket
 import struct
+import subprocess
+import sys
 import threading
 import time
 from datetime import datetime
@@ -34,6 +36,10 @@ class Daemon:
         self._sock_path = self.config.socket_path
         self._running = False
         self._server_thread: threading.Thread | None = None
+        self._osd_proc: subprocess.Popen | None = None
+        self._partial_text = ""
+        self._partial_thread: threading.Thread | None = None
+        self._partial_busy = False
 
     def _ensure_model(self):
         if self.transcriber is None:
@@ -65,9 +71,12 @@ class Daemon:
 
     def _start_recording(self):
         self._ensure_model()
+        self._partial_text = ""
         # Auto-stop por tiempo máximo en hilo aparte
         self.recorder.start()
         play_sound("start")
+        self._launch_osd()
+        self._start_partial_worker()
         notify("🎤 Escuchando...", "Habla ahora. Presiona Win+F de nuevo para terminar.", icon="audio-input-microphone")
         print("[daemon] 🎤 Grabando... Win+F para parar")
 
@@ -92,10 +101,69 @@ class Daemon:
 
         threading.Thread(target=_watchdog, daemon=True).start()
 
+    def _launch_osd(self) -> None:
+        """OSD con nivel de voz (opcional, config overlay)."""
+        if not getattr(self.config, "overlay", True):
+            return
+        try:
+            self._osd_proc = subprocess.Popen(
+                [sys.executable, "-m", "local_speech_to_text.osd", str(self._sock_path)],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                start_new_session=True,
+            )
+        except Exception as e:
+            print(f"[daemon] OSD no lanzado: {e}")
+            self._osd_proc = None
+
+    def _kill_osd(self) -> None:
+        if self._osd_proc:
+            try:
+                self._osd_proc.terminate()
+            except Exception:
+                pass
+            self._osd_proc = None
+
+    def _start_partial_worker(self) -> None:
+        """Transcripción parcial en vivo (opcional, config partial_results)."""
+        if not getattr(self.config, "partial_results", True):
+            return
+
+        interval = getattr(self.config, "partial_interval", 1.5)
+
+        def _worker():
+            while self.recorder.is_recording:
+                time.sleep(interval)
+                if not self.recorder.is_recording or self._partial_busy or not self.transcriber:
+                    continue
+                self._partial_busy = True
+                try:
+                    audio = self.recorder.snapshot(max_seconds=10)
+                    if audio.size > 16000:  # mínimo ~1s
+                        partial = self.transcriber.transcribe_partial(audio, self.recorder.sample_rate)
+                        if partial:
+                            self._partial_text = partial
+                except Exception as e:
+                    print(f"[daemon] parcial: {e}")
+                finally:
+                    self._partial_busy = False
+
+        self._partial_thread = threading.Thread(target=_worker, daemon=True)
+        self._partial_thread.start()
+
+    def _level_payload(self) -> str:
+        return json.dumps({
+            "recording": self.recorder.is_recording,
+            "elapsed": round(self.recorder.elapsed, 1),
+            "rms": round(self.recorder.current_rms, 5),
+            "partial": self._partial_text,
+        })
+
     def _stop_and_transcribe(self):
         print("[daemon] ⏹ Parando grabación...")
         notify("⏳ Transcribiendo...", "Procesando en GPU...", icon="media-record")
+        self._kill_osd()
         recording = self.recorder.stop()
+        self._partial_text = ""
         play_sound("stop")
 
         if recording.samples.size < 800:  # <50ms a 16kHz
@@ -212,6 +280,8 @@ class Daemon:
                     elif data == "status":
                         state = "recording" if self.recorder.is_recording else "idle"
                         conn.sendall(f"{state}\n".encode())
+                    elif data == "level":
+                        conn.sendall((self._level_payload() + "\n").encode())
                     elif data == "quit":
                         conn.sendall(b"bye\n")
                         self.stop()
@@ -265,6 +335,7 @@ class Daemon:
             return
         print("[daemon] Saliendo...")
         self._running = False
+        self._kill_osd()
         if self.recorder.is_recording:
             try:
                 self.recorder.stop()
@@ -286,7 +357,7 @@ def send_command(cmd: str = "toggle", socket_path: Path | None = None) -> str:
         return "daemon no corre (socket no existe). Inicia con: local-stt daemon"
     try:
         s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-        s.settimeout(2.0)
+        s.settimeout(5.0)  # margen: el daemon puede estar notificando/transcribiendo
         s.connect(str(path))
         s.sendall((cmd + "\n").encode())
         resp = s.recv(1024).decode().strip()
