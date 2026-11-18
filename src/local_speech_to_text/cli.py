@@ -239,6 +239,14 @@ def cmd_pick(args):
         notify("Copiado", text[:120], icon="edit-paste")
 
 
+def cmd_config(args):
+    """TUI interactivo para ~/.config/local-stt/config.toml (sin TTY: solo muestra)."""
+    from .config_tui import run_tui
+
+    cfg = _config_from_args(args)
+    sys.exit(run_tui(cfg.config_path))
+
+
 def cmd_doctor(args):
     """Diagnóstico: GPU, daemon, modelo, atajo, clipboard, micro."""
     from .clipboard import notify  # noqa: F401
@@ -445,6 +453,9 @@ def main():
     c.add_argument("wrong", help="Texto que sale mal")
     c.add_argument("right", help="Texto correcto")
     c.set_defaults(func=cmd_correct)
+
+    cf = sub.add_parser("config", help="TUI: editar config.toml interactivamente")
+    cf.set_defaults(func=cmd_config)
 
     f = sub.add_parser("transcribe", help="Transcribe un archivo de audio")
     f.add_argument("file", help="Ruta a wav/mp3/flac")

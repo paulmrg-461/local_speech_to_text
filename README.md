@@ -98,6 +98,8 @@ systemctl --user enable --now local-stt
 | `local-stt reload` | Re-reads config (TOML + env) without restarting the daemon |
 | `local-stt vocab [list\|add\|remove]` | Manage the custom vocabulary passed as Whisper's `initial_prompt` |
 | `local-stt correct 'bad' 'good'` | Add a post-transcription correction rule |
+| `local-stt config` | Interactive config editor (shows config when run without a TTY) |
+| `local-stt translate` | Toggle translation mode: dictate in your language, output in English |
 | `local-stt doctor` | Full diagnosis: GPU, CUDA, cuBLAS, daemon, model, hotkey, clipboard tools, mic |
 | `local-stt transcribe audio.wav --copy` | One-off transcription of an audio file |
 
@@ -184,6 +186,8 @@ Runs entirely on CPU (~0% GPU). The monitor pauses while you dictate so it can't
 ## Configuration
 
 Edit `~/.config/local-stt/config.toml` (created by the installer) and run `local-stt reload`. **Environment variables always win over the TOML**, and CLI flags win over everything.
+
+Prefer not to edit files by hand? `local-stt config` opens an interactive menu (model, language, toggles, wake word…) — press Enter to keep each value, and it never rewrites the file unless something actually changed. Without a TTY it just prints the effective config.
 
 ```toml
 model = "large-v3-turbo"   # tiny, base, small, medium, large-v3, distil-large-v3
