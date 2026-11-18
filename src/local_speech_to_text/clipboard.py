@@ -7,12 +7,19 @@ import time
 
 
 def _run(cmd: list[str], input_text: str | None = None, timeout: float = 2.0) -> bool:
+    """Ejecuta un comando esperando éxito.
+
+    IMPORTANTE: stdout/stderr a DEVNULL. wl-copy hace fork para servir el
+    clipboard en background; si hereda un PIPE, communicate() espera EOF
+    del hijo eternamente (2s de timeout por cada copy). Con DEVNULL el
+    hijo no bloquea nada.
+    """
     try:
         result = subprocess.run(
             cmd,
             input=input_text.encode("utf-8") if input_text is not None else None,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
             timeout=timeout,
         )
         return result.returncode == 0
