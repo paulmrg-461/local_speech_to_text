@@ -1,0 +1,16 @@
+[Unit]
+Description=Local STT Daemon (faster-whisper + CUDA) - Win+F dictado
+After=graphical-session.target pipewire.service
+
+[Service]
+Type=simple
+# Variante empaquetada (pacman/AUR): binario de sistema, sin venv.
+# La config se lee de ~/.config/local-stt/config.toml
+ExecStart=/usr/bin/local-stt daemon
+Restart=on-failure
+RestartSec=3
+Environment=PYTHONUNBUFFERED=1
+EnvironmentFile=-%h/.config/local-stt/config.env
+
+[Install]
+WantedBy=default.target

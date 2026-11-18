@@ -25,6 +25,15 @@
 
 ## Quick start (everything in one command)
 
+**Option A — Arch/EndeavourOS (AUR package, recommended):**
+
+```bash
+yay -S local-stt              # from AUR: no venv in your home, deps via pacman
+local-stt setup              # system deps, hotkeys, service start, doctor, cheat sheet
+```
+
+**Option B — any distro (clone + venv):**
+
 ```bash
 cd ~/Documents/dev_projects/DevPaul/local_speech_to_text
 chmod +x scripts/*.sh
@@ -42,6 +51,24 @@ If anything is still red after setup, check
 re-login on KDE** (Plasma doesn't hot-reload custom shortcuts).
 
 ## Detailed installation
+
+### AUR (`local-stt`)
+
+The PKGBUILD lives in [`packaging/aur/`](packaging/aur/). It builds the wheel
+with `hatchling`, installs it with `python-installer` (no venv, no PEP 668
+hacks) and — because Arch ships CUDA 13 while `ctranslate2` is compiled
+against CUDA 12 — bundles the cuBLAS 12 libs from the PyPI wheel into
+`/usr/lib/local-stt/cublas/`, where the daemon preloads them at runtime
+(`cuda_libs.py`).
+
+- Python deps come from pacman/AUR (`python-faster-whisper`, `python-sounddevice`, …).
+- The systemd unit uses `ExecStart=/usr/bin/local-stt daemon`.
+- To remove the *system* files use `sudo pacman -R local-stt`; `local-stt
+  uninstall` only cleans the user-level pieces (service, hotkeys, and with
+  `--purge` your config/history — it detects a packaged install and won't
+  touch `/usr`).
+
+### Clone + `install.sh`
 
 `install.sh` does all of the following:
 1. Installs system dependencies (Arch; safe to re-run).
@@ -338,7 +365,7 @@ Not implemented yet — documented so expectations are clear:
 | Item | Status | Notes |
 |---|---|---|
 | **CI (GitHub Actions)** | ✅ done | `.github/workflows/ci.yml` runs the 93 unit tests (matrix 3.11/3.13) + `ruff check` on every push/PR. Slim deps (no GPU wheels): heavy imports are lazy, so tests only need `numpy` + `text2num` + `pytest`. |
-| **AUR / PKGBUILD** | ❌ | Installation is currently clone + `install.sh`. A `local-stt` package would remove the venv from your home. |
+| **AUR / PKGBUILD** | ✅ done | `packaging/aur/` ships a source PKGBUILD (AUR deps for the Python stack, cuBLAS 12 bundled from the PyPI wheel into `/usr/lib/local-stt/cublas`). Uninstall via `pacman -R local-stt`; `local-stt uninstall` stays user-level only. |
 | **Push-to-talk (hold key)** | ❌ | Only toggle mode exists (press to start, press to stop). Hold-to-talk needs a long-running listener process per desktop shell. |
 | **Custom Spanish wake word** | ❌ | openWakeWord ships English-trained models ("hey jarvis", "alexa"…). A custom "oye computadora" requires training a model (synthetic TTS data + fine-tune). |
 | **Wayland-native OSD** | partial | The floating indicator runs via XWayland (`DISPLAY`). Works, but a native layer-shell client (Qt/GTK) would survive XWayland-less sessions. |
@@ -354,7 +381,12 @@ re-processed.
 ## Uninstall
 
 ```bash
-.venv/bin/local-stt uninstall --yes --purge   # servicio + atajos + config + historial + .venv
+# Instalado vía AUR:
+sudo pacman -R local-stt                          # archivos del sistema
+local-stt uninstall --yes --purge                  # servicio + atajos + config + historial
+
+# Instalado vía clone + install.sh:
+.venv/bin/local-stt uninstall --yes --purge        # lo anterior + .venv del repo
 # sin --purge: conserva tus datos por si vuelves
 ```
 

@@ -1,0 +1,67 @@
+# Maintainer: DevPaul <paulmrg-461>
+# local-stt: dictado local (faster-whisper + CUDA) para Wayland.
+# Build: makepkg -si  (requiere base-devel y las deps AUR)
+pkgname=local-stt
+pkgver=0.1.0
+pkgrel=1
+pkgdesc="Dictado local en Linux con faster-whisper/CUDA: Win+F para transcribir y copiar"
+arch=(x86_64)
+url="https://github.com/paulmrg-461/local_speech_to_text"
+license=(MIT)
+install=local-stt.install
+depends=(
+  python
+  # Python deps disponibles en repos oficiales
+  python-numpy
+  python-pyperclip
+  python-soundfile
+  # Python deps desde AUR
+  python-faster-whisper   # trae python-ctranslate2
+  python-sounddevice
+  python-text2num
+  # Sistema: clipboard, notificaciones, tipeo Wayland
+  portaudio
+  wl-clipboard
+  libnotify
+  wtype
+  ydotool
+)
+makedepends=(python-build python-installer python-hatchling)
+optdepends=(
+  'python-openwakeword: manos libres con wake word ("hey jarvis")'
+)
+source=(
+  "$url/archive/refs/tags/v$pkgver/$pkgname-$pkgver.tar.gz"
+  "https://files.pythonhosted.org/packages/af/eb/ff4b8c503fa1f1796679dce648854d58751982426e4e4b37d6fce49d259c/nvidia_cublas_cu12-12.6.4.1-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl"
+)
+noextract=("nvidia_cublas_cu12-12.6.4.1-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl")
+sha256sums=(
+  'SKIP'  # TODO(tag v0.1.0): rellenar tras publicar el release (makepkg -g)
+  '08ed2686e9875d01b58e3cb379c6896df8e76c75e0d4a7f7dace3d7b6d9ef8eb'
+)
+
+build() {
+  cd "$pkgname-$pkgver"
+  python -m build --wheel --no-isolation
+}
+
+package() {
+  cd "$pkgname-$pkgver"
+
+  # 1) Wheel del paquete (site-packages + /usr/bin/local-stt)
+  python -m installer --destdir="$pkgdir" dist/*.whl
+
+  # 2) Unidad systemd --user con binario de sistema
+  install -Dm644 "$srcdir/local-stt.service" \
+    "$pkgdir/usr/lib/systemd/user/local-stt.service"
+
+  # 3) cuBLAS 12 (el wheel de PyPI): ctranslate2 está compilado contra CUDA 12
+  #    pero Arch instala CUDA 13; el daemon precarga estas .so.12 con ctypes
+  #    desde /usr/lib/local-stt/cublas (ver src/local_speech_to_text/cuda_libs.py).
+  local whl="$srcdir/nvidia_cublas_cu12-12.6.4.1-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl"
+  bsdtar -xf "$whl" -C "$srcdir" nvidia/cublas/lib/libcublas.so.12 nvidia/cublas/lib/libcublasLt.so.12
+  install -Dm755 "$srcdir/nvidia/cublas/lib/libcublas.so.12" \
+    "$pkgdir/usr/lib/local-stt/cublas/libcublas.so.12"
+  install -Dm755 "$srcdir/nvidia/cublas/lib/libcublasLt.so.12" \
+    "$pkgdir/usr/lib/local-stt/cublas/libcublasLt.so.12"
+}
