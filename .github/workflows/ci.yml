@@ -1,9 +1,9 @@
 # CI: tests en cada push/PR.
 #
 # Los imports pesados (faster-whisper, sounddevice, openwakeword, CUDA) son
-# lazy/guardados con try, así que los 93 tests unitarios corren con un set
-# slim de dependencias: numpy + text2num + pytest. Esto evita bajar
-# ctranslate2 y nvidia-cublas-cu12 (~1 GB) por cada push.
+# lazy/guardados con try, así que la suite unitaria corre con un set slim de
+# dependencias: numpy + text2num + pytest. Esto evita bajar ctranslate2 y
+# nvidia-cublas-cu12 (~1 GB) por cada push.
 #
 # Nota: los tests usan tomllib (Python >= 3.11); 3.10 queda fuera de la
 # matrix aunque pyproject declare requires-python >= 3.10.
@@ -51,3 +51,22 @@ jobs:
         run: |
           pip install ruff
           ruff check src tests scripts
+
+  build:
+    # Mismo camino que packaging/aur/PKGBUILD: wheel con hatchling e
+    # instalación con python-installer. Detecta roturas de empaquetado
+    # (entry point, package discovery) que los tests no ven.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Wheel + instalación empaquetada
+        run: |
+          pip install build installer hatchling wheel
+          python -m build --wheel --no-isolation --outdir dist .
+          python -m installer --destdir="$PWD/pkg" --prefix=/usr dist/*.whl
+          test -x pkg/usr/bin/local-stt
