@@ -62,6 +62,29 @@ def _capitalize_sentences(text: str) -> str:
     return re.sub(r"(^|[.!?]\s*|\n\s*)((?:[(\"¡¿«']\s*)*)(\w)", _cap, text)
 
 
+_PORCIENTO = "PORCIENTOGUARD"
+
+
+def numbers_to_digits(text: str) -> str:
+    """Convierte números hablados a dígitos ('tres coma catorce' -> '3,14').
+
+    Protege 'por ciento' (text2num lo leería como parte del número: 'ciento y
+    tres') y lo convierte a '%' tras el dígito. Requiere el paquete text2num;
+    si no está, devuelve el texto sin tocar.
+    """
+    try:
+        from text_to_num import alpha2digit
+    except ImportError:
+        return text
+    guarded = re.sub(r"\bpor ciento\b", _PORCIENTO, text, flags=re.IGNORECASE)
+    try:
+        out = alpha2digit(guarded, lang="es")
+    except Exception:
+        return text
+    out = out.replace(_PORCIENTO, "por ciento")
+    return re.sub(r"(\d)\s+por ciento\b", r"\1 %", out, flags=re.IGNORECASE)
+
+
 def clean_text(text: str) -> str:
     """Convierte comandos hablados en puntuación y normaliza el texto."""
     if not text:

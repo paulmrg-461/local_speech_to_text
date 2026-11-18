@@ -9,6 +9,7 @@ authors = [{ name = "DevPaul" }]
 keywords = ["speech-to-text", "whisper", "stt", "cuda", "wayland"]
 dependencies = [
     "faster-whisper>=1.0.0",
+    "text2num>=3.0",  # números hablados -> dígitos (opcional, numbers_to_digits)
     "sounddevice>=0.4.6",
     "soundfile>=0.12.1",
     "numpy>=1.24",

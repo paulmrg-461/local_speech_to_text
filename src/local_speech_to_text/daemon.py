@@ -17,7 +17,7 @@ import numpy as np
 from .clipboard import copy_to_clipboard, notify, paste_via_key, play_sound
 from .config import Config
 from .recorder import AudioRecorder
-from .text_cleaner import clean_text
+from .text_cleaner import clean_text, numbers_to_digits
 from .transcriber import Transcriber
 from .vocab import apply_corrections, load_corrections, load_vocabulary
 
@@ -228,6 +228,8 @@ class Daemon:
         text = clean_text(raw) if self.config.dictation_commands else raw
         if self.corrections:
             text = apply_corrections(text, self.corrections)
+        if getattr(self.config, "numbers_to_digits", False):
+            text = numbers_to_digits(text)
         print(f"[daemon] Transcrito en {time.time() - t0:.2f}s")
 
         if not text.strip():

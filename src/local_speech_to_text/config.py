@@ -48,6 +48,7 @@ _ENV_MAP = {
     "wake_word": "LOCAL_STT_WAKE_WORD",
     "wake_word_model": "LOCAL_STT_WAKE_MODEL",
     "wake_word_threshold": "LOCAL_STT_WAKE_THRESHOLD",
+    "numbers_to_digits": "LOCAL_STT_NUMBERS",
 }
 
 _DEFAULTS = {
@@ -70,6 +71,7 @@ _DEFAULTS = {
     "wake_word": False,  # true: "hey jarvis" arranca el dictado sin teclado
     "wake_word_model": "hey_jarvis",  # o ruta a .onnx custom
     "wake_word_threshold": 0.5,
+    "numbers_to_digits": False,  # true: "tres coma catorce" -> 3,14 (opinional, ver README)
     "auto_copy": True,
 }
 
@@ -111,6 +113,7 @@ class Config:
     wake_word: bool = False
     wake_word_model: str = "hey_jarvis"
     wake_word_threshold: float = 0.5
+    numbers_to_digits: bool = False
     vocabulary_file: Path = _default_vocab_path()
     corrections_file: Path = _default_corrections_path()
     socket_path: Path = Path(os.environ.get("LOCAL_STT_SOCKET", "/tmp/local-stt.sock"))
