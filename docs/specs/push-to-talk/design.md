@@ -105,10 +105,13 @@ HotkeyListener.start()
 ## 6. Atajos y setup
 
 Con `push_to_talk=true` el compositor **no** debe ejecutar `local-stt toggle`
-en Win+F: el listener gestiona press y release. `cmd_setup` exporta
+en Win+F: el listener gestiona press y release. `cmd_setup` comprueba antes
+que hold pueda funcionar de verdad (`_hold_ready`: chord válido, `evdev`,
+grupo `input`, teclado legible); solo entonces exporta
 `LOCAL_STT_SKIP_TOGGLE=1` y `setup-hotkey.sh` omite la acción de dictado,
-manteniendo Win+Shift+F. Al desactivar hold, `local-stt setup` vuelve a
-registrarla.
+manteniendo Win+Shift+F. Si no está listo, conserva Win+F en modo toggle y
+avisa: activar hold sin permiso no debe dejar al usuario sin atajo. Al
+desactivar hold, `local-stt setup` vuelve a registrar ambos.
 
 ## 7. Seguridad
 

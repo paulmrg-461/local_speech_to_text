@@ -322,15 +322,35 @@ INPUT_GROUP_HINT = (
 )
 
 
+def _hold_ready(cfg) -> tuple[bool, str]:
+    """(listo, motivo) para push-to-talk: evdev + permiso + teclado legible."""
+    from .hotkey_hold import parse_chord
+
+    if parse_chord(cfg.hold_key) is None:
+        return False, f"hold_key inválido: {cfg.hold_key!r}"
+    try:
+        import evdev  # noqa: F401
+    except ImportError:
+        return False, "falta python-evdev (extra [hold])"
+    if not _input_group_ok():
+        return False, "usuario fuera del grupo input"
+    device = _hold_device_hint()
+    if device.startswith(("sin permiso", "falta", "ningún")):
+        return False, device
+    return True, device
+
+
 def _hold_device_hint() -> str:
     """Primer teclado legible, o el motivo por el que no se puede abrir."""
     try:
+        import glob
+
         import evdev
         from evdev import ecodes
 
-        for path in evdev.list_devices():
+        for path in sorted(glob.glob("/dev/input/event*")):
             try:
-                dev = evdev.InputDevice(path)
+                dev = evdev.InputDevice(path, readonly=True)
             except PermissionError:
                 return "sin permiso para /dev/input/event*"
             except Exception:
@@ -384,7 +404,14 @@ def cmd_setup(args):
         if cfg.push_to_talk:
             # El listener evdev gestiona Win+F (press y release); si el
             # compositor también lo lanzara, el dictado se pararía solo.
-            env["LOCAL_STT_SKIP_TOGGLE"] = "1"
+            # Solo se desregistra si hold puede funcionar de verdad: si no,
+            # el usuario se quedaría sin ningún atajo.
+            ready, why = _hold_ready(cfg)
+            if ready:
+                env["LOCAL_STT_SKIP_TOGGLE"] = "1"
+            else:
+                print(f"   ⚠️  push_to_talk activo pero no disponible ({why})")
+                print("      mantengo Win+F en modo toggle hasta que lo resuelvas")
         r = subprocess.run(["bash", str(hotkey)], env=env, timeout=60,
                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         print("   ✅ registrados" if r.returncode == 0 else

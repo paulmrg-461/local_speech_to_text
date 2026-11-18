@@ -41,3 +41,43 @@ def test_hold_device_hint_sin_evdev(monkeypatch):
 def test_hold_device_hint_reporta_permiso_o_teclado():
     hint = cli._hold_device_hint()
     assert any(k in hint for k in ("sin permiso", "keyboard", "Keyboard", "ningún", "python-evdev"))
+
+
+def _cfg(**kw):
+    from dataclasses import replace
+    from pathlib import Path
+
+    from local_speech_to_text.config import Config
+
+    base = Config.load(config_file=Path("/no/existe.toml"))
+    return replace(base, push_to_talk=True, **kw)
+
+
+def test_hold_ready_sin_evdev(monkeypatch):
+    monkeypatch.setitem(__import__("sys").modules, "evdev", None)
+    ok, why = cli._hold_ready(_cfg())
+    assert ok is False
+    assert "evdev" in why
+
+
+def test_hold_ready_sin_grupo(monkeypatch):
+    pytest.importorskip("evdev")
+    monkeypatch.setattr(cli, "_input_group_ok", lambda: False)
+    ok, why = cli._hold_ready(_cfg())
+    assert ok is False
+    assert "input" in why
+
+
+def test_hold_ready_chord_invalido(monkeypatch):
+    ok, why = cli._hold_ready(_cfg(hold_key="hola+f"))
+    assert ok is False
+    assert "hold_key" in why
+
+
+def test_hold_ready_ok(monkeypatch):
+    pytest.importorskip("evdev")
+    monkeypatch.setattr(cli, "_input_group_ok", lambda: True)
+    monkeypatch.setattr(cli, "_hold_device_hint", lambda: "AT Translated Set 2 keyboard (/dev/input/event3)")
+    ok, why = cli._hold_ready(_cfg())
+    assert ok is True
+    assert "event3" in why

@@ -236,12 +236,16 @@ class EvdevSource(EventSource):
 
     def _discover(self) -> bool:
         """Abre teclados nuevos. Devuelve True si alguno dio PermissionError."""
+        import glob
+
         denied = False
-        for path in self._evdev.list_devices():
+        # list_devices() filtra por permisos y ocultaría el motivo real: con
+        # el usuario fuera de `input` hay devices que existen pero no se leen.
+        for path in sorted(glob.glob("/dev/input/event*")):
             if path in self._devices:
                 continue
             try:
-                dev = self._evdev.InputDevice(path)
+                dev = self._evdev.InputDevice(path, readonly=True)
             except PermissionError:
                 denied = True
                 continue
