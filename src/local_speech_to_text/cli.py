@@ -416,11 +416,38 @@ def _importable(module: str) -> bool:
         return False
 
 
+def is_packaged_install(bin_path: str | Path | None = None) -> bool:
+    """True si el binario local-stt lo instaló el sistema (pacman/AUR: bajo /usr).
+
+    Inyecta `bin_path` para tests; por defecto resuelve `local-stt` del PATH.
+    """
+    exe = str(bin_path) if bin_path is not None else shutil.which("local-stt")
+    return exe is not None and Path(exe).resolve().is_relative_to("/usr")
+
+
+def _purge_paths(packaged: bool) -> list[Path]:
+    """Directorios que --purge borra. El venv del repo solo si NO es instalación empaquetada:
+    con pacman/AUR (binario bajo /usr) el venv lo gestiona el paquete, no nosotros."""
+    dirs = [
+        Path.home() / ".config" / "local-stt",
+        Path.home() / ".local" / "share" / "local-stt",
+        Path.home() / ".local" / "state" / "local-stt",
+    ]
+    if not packaged:
+        dirs.append(Path(__file__).resolve().parents[2] / ".venv")
+    return dirs
+
+
 def cmd_uninstall(args):
-    """Desinstala: servicio, atajos (KDE/GNOME) y opcionalmente datos (--purge)."""
+    """Desinstala: servicio, atajos (KDE/GNOME) y opcionalmente datos (--purge).
+
+    Instalación empaquetada (pacman/AUR, binario bajo /usr): no se toca el venv
+    del sistema; se sugiere quitar binario y venv con `sudo pacman -R local-stt`.
+    """
     if not args.yes:
         print("Esto detiene el daemon y borra el servicio y los atajos. Usa --yes para confirmar.")
         sys.exit(1)
+    packaged = is_packaged_install()
 
     print("→ deteniendo servicio")
     subprocess.run(["systemctl", "--user", "disable", "--now", "local-stt"], capture_output=True, timeout=30)
@@ -443,13 +470,12 @@ def cmd_uninstall(args):
         Path(p).unlink(missing_ok=True)
 
     if args.purge:
-        print("→ borrando datos y venv (--purge)")
-        for d in (Path.home() / ".config" / "local-stt",
-                  Path.home() / ".local" / "share" / "local-stt",
-                  Path.home() / ".local" / "state" / "local-stt",
-                  Path(__file__).resolve().parents[2] / ".venv"):
+        print("→ borrando datos y venv (--purge)" if not packaged else "→ borrando datos (--purge)")
+        for d in _purge_paths(packaged):
             if d.exists():
                 shutil.rmtree(d)
+    if packaged:
+        print("ℹ️  instalación empaquetada (binario bajo /usr): quítala con: sudo pacman -R local-stt")
     print("✅ Desinstalado." + ("" if args.purge else " Usa --purge además para borrar config/historial/.venv."))
 
 
@@ -739,7 +765,11 @@ def main():
     up = sub.add_parser("update", help="git pull + pip install + tests + restart del daemon")
     up.set_defaults(func=cmd_update)
 
-    un = sub.add_parser("uninstall", help="Quita servicio y atajos (--purge borra también datos)")
+    un = sub.add_parser(
+        "uninstall",
+        help="Quita servicio y atajos (--purge borra también datos). "
+        "Instalado con pacman/AUR: sudo pacman -R local-stt",
+    )
     un.add_argument("--yes", action="store_true", help="Confirmar sin prompt")
     un.add_argument("--purge", action="store_true", help="Borrar config, historial y .venv")
     un.set_defaults(func=cmd_uninstall)
