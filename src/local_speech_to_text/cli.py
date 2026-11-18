@@ -93,6 +93,12 @@ def cmd_reload(args):
     print(resp)
 
 
+def cmd_translate(args):
+    """Alterna modo traducción: dicta en tu idioma, sale en inglés."""
+    resp = send_command("translate", _config_from_args(args).socket_path)
+    print(resp)
+
+
 def cmd_devices(args):
     print(AudioRecorder.list_devices())
 
@@ -397,6 +403,9 @@ def main():
 
     r = sub.add_parser("reload", help="Recarga config en caliente (modelo/idioma/vocab)")
     r.set_defaults(func=cmd_reload)
+
+    tr = sub.add_parser("translate", help="Alterna traducción: dicta en tu idioma, sale en inglés")
+    tr.set_defaults(func=cmd_translate)
 
     dev = sub.add_parser("devices", help="Lista micrófonos")
     dev.set_defaults(func=cmd_devices)

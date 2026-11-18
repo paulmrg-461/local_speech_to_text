@@ -24,6 +24,7 @@ class Transcriber:
         self.beam_size = beam_size
         self.vad_filter = vad_filter
         self.initial_prompt = initial_prompt
+        self.task = "transcribe"
         self.device = device
         self.compute_type = compute_type
         self._model = None
@@ -80,6 +81,7 @@ class Transcriber:
             vad_parameters=dict(min_silence_duration_ms=500),
             condition_on_previous_text=False,
             initial_prompt=self.initial_prompt,
+            task=self.task,
         )
         text_parts = []
         for seg in segments:
@@ -105,6 +107,7 @@ class Transcriber:
             vad_filter=False,
             condition_on_previous_text=False,
             initial_prompt=self.initial_prompt,
+            task=self.task,
         )
         return " ".join(seg.text.strip() for seg in segments).strip()
 

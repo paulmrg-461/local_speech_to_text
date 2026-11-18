@@ -41,6 +41,7 @@ class Daemon:
         self._partial_thread: threading.Thread | None = None
         self._partial_busy = False
         self.wake_monitor = None  # WakeWordMonitor | None
+        self.translate_mode = False  # dictar en un idioma -> salir en inglés
 
     def _ensure_model(self):
         if self.transcriber is None:
@@ -61,6 +62,7 @@ class Daemon:
                 vad_filter=self.config.vad_filter,
                 initial_prompt=vocab or None,
             )
+            self.transcriber.task = "translate" if self.translate_mode else "transcribe"
             notify("Local STT", f"Modelo {self.config.model} listo en {self.config.device}")
 
     def toggle(self):
@@ -191,6 +193,19 @@ class Daemon:
             "partial": self._partial_text,
         })
 
+    def toggle_translate(self) -> str:
+        """Alterna traducción (Whisper: cualquier idioma -> inglés)."""
+        self.translate_mode = not self.translate_mode
+        task = "translate" if self.translate_mode else "transcribe"
+        if self.transcriber:
+            self.transcriber.task = task
+        if self.translate_mode:
+            notify("🌐 Modo traducción ON", "Dicta en tu idioma: saldrá en inglés")
+        else:
+            notify("Modo traducción OFF", "Dictado normal")
+        print(f"[daemon] task={task}")
+        return f"translate={'on' if self.translate_mode else 'off'}"
+
     def _stop_and_transcribe(self):
         print("[daemon] ⏹ Parando grabación...")
         notify("⏳ Transcribiendo...", "Procesando en GPU...", icon="media-record")
@@ -316,6 +331,11 @@ class Daemon:
                     elif data == "reload":
                         try:
                             conn.sendall((self.reload_config() + "\n").encode())
+                        except Exception as e:
+                            conn.sendall(f"error: {e}\n".encode())
+                    elif data == "translate":
+                        try:
+                            conn.sendall((self.toggle_translate() + "\n").encode())
                         except Exception as e:
                             conn.sendall(f"error: {e}\n".encode())
                     elif data == "status":
