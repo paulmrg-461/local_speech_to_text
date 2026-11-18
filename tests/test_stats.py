@@ -1,6 +1,5 @@
 import json
 from datetime import date, timedelta
-from pathlib import Path
 
 from local_speech_to_text.stats import compute_stats, load_entries, render_stats
 

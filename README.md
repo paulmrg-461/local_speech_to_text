@@ -337,7 +337,7 @@ Not implemented yet — documented so expectations are clear:
 
 | Item | Status | Notes |
 |---|---|---|
-| **CI (GitHub Actions)** | ❌ not set up | 71 local tests exist (`pytest tests/`) but nothing runs them on push. Next natural step. |
+| **CI (GitHub Actions)** | ✅ done | `.github/workflows/ci.yml` runs the 93 unit tests (matrix 3.11/3.13) + `ruff check` on every push/PR. Slim deps (no GPU wheels): heavy imports are lazy, so tests only need `numpy` + `text2num` + `pytest`. |
 | **AUR / PKGBUILD** | ❌ | Installation is currently clone + `install.sh`. A `local-stt` package would remove the venv from your home. |
 | **Push-to-talk (hold key)** | ❌ | Only toggle mode exists (press to start, press to stop). Hold-to-talk needs a long-running listener process per desktop shell. |
 | **Custom Spanish wake word** | ❌ | openWakeWord ships English-trained models ("hey jarvis", "alexa"…). A custom "oye computadora" requires training a model (synthetic TTS data + fine-tune). |

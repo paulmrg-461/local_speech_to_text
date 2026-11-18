@@ -166,7 +166,7 @@ def cmd_vocab(args):
         print(f"✅ Vocabulario guardado ({len(terms)} términos): {path}")
     else:
         if not terms:
-            print(f"Vocabulario vacío. Añade con: local-stt vocab add 'DevPaul' 'FastAPI'")
+            print("Vocabulario vacío. Añade con: local-stt vocab add 'DevPaul' 'FastAPI'")
         else:
             print(f"Vocabulario ({len(terms)}) → {path}")
             print("  " + "\n  ".join(terms))
@@ -197,7 +197,6 @@ def _pick_tool() -> str | None:
 
 def cmd_pick(args):
     """Abre wofi/rofi con las últimas transcripciones; la elegida se copia y pega."""
-    import shutil
     import subprocess as sp
 
     cfg = _config_from_args(args)
@@ -273,7 +272,6 @@ def _check_system_deps() -> bool:
 
 def cmd_setup(args):
     """Puesta en marcha total: deps -> modelo -> atajos -> servicio -> doctor -> chuleta."""
-    from .clipboard import notify
 
     try:  # salida en orden aunque se redirija
         import sys as _sys
@@ -379,7 +377,8 @@ def _strip_gnome_bindings(existing: str) -> str:
 def cmd_update(args):
     """Auto-actualiza: git pull -> pip install -e . -> tests -> restart daemon."""
     repo = Path(__file__).resolve().parents[2]
-    git = lambda *a: subprocess.run(["git", "-C", str(repo), *a], capture_output=True, text=True, timeout=120)
+    def git(*a):
+        return subprocess.run(["git", "-C", str(repo), *a], capture_output=True, text=True, timeout=120)
 
     print(f"→ git pull en {repo}")
     pull = git("pull", "--ff-only")
@@ -456,7 +455,6 @@ def cmd_uninstall(args):
 
 def cmd_bench(args):
     """Compara modelos en tu GPU con un clip real (archivo o grabación)."""
-    import numpy as np
 
     from .bench import bench_model, render_table
 
@@ -547,7 +545,7 @@ def cmd_doctor(args):
 
     nv = nvidia_pip_dir()
     failures += not _check((nv / "cublas" / "lib" / "libcublas.so.12").exists(), "cuBLAS 12 (pip)",
-                           f"{nv}", f"Falta nvidia-cublas-cu12: .venv/bin/pip install nvidia-cublas-cu12")
+                           f"{nv}", "Falta nvidia-cublas-cu12: .venv/bin/pip install nvidia-cublas-cu12")
 
     # 3. Daemon
     failures += not _check(cfg.socket_path.exists(), "Daemon", "corriendo",

@@ -1,6 +1,4 @@
-import subprocess
 
-import pytest
 
 from local_speech_to_text.cli import _check_system_deps, _cheatsheet
 

@@ -1,7 +1,5 @@
 import io
-from pathlib import Path
 
-import pytest
 
 from local_speech_to_text.config_tui import _render, _load_current, run_tui
 

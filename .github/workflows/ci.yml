@@ -1,0 +1,55 @@
+# CI: tests en cada push/PR.
+#
+# Los imports pesados (faster-whisper, sounddevice, openwakeword, CUDA) son
+# lazy/guardados con try, así que los 93 tests unitarios corren con un set
+# slim de dependencias: numpy + text2num + pytest. Esto evita bajar
+# ctranslate2 y nvidia-cublas-cu12 (~1 GB) por cada push.
+#
+# Nota: los tests usan tomllib (Python >= 3.11); 3.10 queda fuera de la
+# matrix aunque pyproject declare requires-python >= 3.10.
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.11", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+          cache: pip
+
+      - name: Instalar (slim, sin deps pesadas)
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e . --no-deps
+          pip install numpy text2num pytest
+
+      - name: Tests
+        run: python -m pytest tests/ -q
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+
+      - name: Ruff
+        run: |
+          pip install ruff
+          ruff check src tests scripts

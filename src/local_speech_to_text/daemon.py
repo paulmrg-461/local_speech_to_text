@@ -4,7 +4,6 @@ import json
 import os
 import signal
 import socket
-import struct
 import subprocess
 import sys
 import threading
@@ -12,7 +11,6 @@ import time
 from datetime import datetime
 from pathlib import Path
 
-import numpy as np
 
 from .clipboard import copy_to_clipboard, notify, paste_via_key, play_sound
 from .config import Config
