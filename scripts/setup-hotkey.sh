@@ -67,28 +67,38 @@ setup_kde() {
   KHOTKEYSRC="${XDG_CONFIG_HOME:-$HOME/.config}/khotkeysrc"
   local UUID="local-stt-toggle-$(echo -n "$BIN" | md5sum | cut -c1-8)"
 
-  # Grupo Data: entrada principal (ignora error en sandbox RO, se verifica luego)
-  kwriteconfig6 --file khotkeysrc --group Data --key DataCount 1 2>/dev/null || true
+  # Grupo Data: dos acciones (dictado e historial) (ignora error en sandbox RO)
+  kwriteconfig6 --file khotkeysrc --group Data --key DataCount 2 2>/dev/null || true
 
+  # ---- Acción 1: dictado (Meta+F -> toggle) ----
   kwriteconfig6 --file khotkeysrc --group Data_1 --key Comment "Local STT Dictado (Win+F)" 2>/dev/null || true
   kwriteconfig6 --file khotkeysrc --group Data_1 --key Enabled true 2>/dev/null || true
   kwriteconfig6 --file khotkeysrc --group Data_1 --key Name "Local STT" 2>/dev/null || true
   kwriteconfig6 --file khotkeysrc --group Data_1 --key Type "SIMPLE_ACTION_DATA" 2>/dev/null || true
-
-  # Acción: ejecutar comando
   kwriteconfig6 --file khotkeysrc --group Data_1Actions --key ActionsCount 1 2>/dev/null || true
   kwriteconfig6 --file khotkeysrc --group Data_1Actions0 --key CommandURL "$BIN toggle" 2>/dev/null || true
   kwriteconfig6 --file khotkeysrc --group Data_1Actions0 --key Type "COMMAND_URL" 2>/dev/null || true
-
-  # Condiciones vacías
   kwriteconfig6 --file khotkeysrc --group Data_1Conditions --key ConditionsCount 0 2>/dev/null || true
   kwriteconfig6 --file khotkeysrc --group Data_1Conditions --key Comment "" 2>/dev/null || true
-
-  # Trigger: Meta+F
   kwriteconfig6 --file khotkeysrc --group Data_1Triggers --key TriggersCount 1 2>/dev/null || true
   kwriteconfig6 --file khotkeysrc --group Data_1Triggers0 --key Key "Meta+F" 2>/dev/null || true
   kwriteconfig6 --file khotkeysrc --group Data_1Triggers0 --key Type "SHORTCUT" 2>/dev/null || true
   kwriteconfig6 --file khotkeysrc --group Data_1Triggers0 --key Uuid "$UUID" 2>/dev/null || true
+
+  # ---- Acción 2: selector de historial (Meta+Shift+F -> pick) ----
+  kwriteconfig6 --file khotkeysrc --group Data_2 --key Comment "Local STT Historial (Win+Shift+F)" 2>/dev/null || true
+  kwriteconfig6 --file khotkeysrc --group Data_2 --key Enabled true 2>/dev/null || true
+  kwriteconfig6 --file khotkeysrc --group Data_2 --key Name "Local STT Historial" 2>/dev/null || true
+  kwriteconfig6 --file khotkeysrc --group Data_2 --key Type "SIMPLE_ACTION_DATA" 2>/dev/null || true
+  kwriteconfig6 --file khotkeysrc --group Data_2Actions --key ActionsCount 1 2>/dev/null || true
+  kwriteconfig6 --file khotkeysrc --group Data_2Actions0 --key CommandURL "$BIN pick" 2>/dev/null || true
+  kwriteconfig6 --file khotkeysrc --group Data_2Actions0 --key Type "COMMAND_URL" 2>/dev/null || true
+  kwriteconfig6 --file khotkeysrc --group Data_2Conditions --key ConditionsCount 0 2>/dev/null || true
+  kwriteconfig6 --file khotkeysrc --group Data_2Conditions --key Comment "" 2>/dev/null || true
+  kwriteconfig6 --file khotkeysrc --group Data_2Triggers --key TriggersCount 1 2>/dev/null || true
+  kwriteconfig6 --file khotkeysrc --group Data_2Triggers0 --key Key "Meta+Shift+F" 2>/dev/null || true
+  kwriteconfig6 --file khotkeysrc --group Data_2Triggers0 --key Type "SHORTCUT" 2>/dev/null || true
+  kwriteconfig6 --file khotkeysrc --group Data_2Triggers0 --key Uuid "$UUID-pick" 2>/dev/null || true
 
   if [[ ! -f "$KHOTKEYSRC" ]]; then
     echo "❌ No se pudo escribir $KHOTKEYSRC (¿sistema de archivos de solo lectura? Ejecuta fuera del sandbox/contenedor)"
@@ -106,7 +116,7 @@ setup_kde() {
   echo "   Alternativa: kquitapp6 kglobalaccel && kglobalaccel6 &  (o reinicia)"
 
   echo ""
-  echo "✅ Atajo KDE configurado: Meta+F -> $BIN toggle"
+  echo "✅ Atajos KDE configurados: Meta+F -> dictado | Meta+Shift+F -> historial"
   echo "   Verifica en: Ajustes del sistema → Atajos → Atajos personalizados → Local STT"
   echo "   Prueba: presiona Win+F. Si no funciona, reasigna el activador a Meta+F manualmente."
 }
@@ -126,24 +136,34 @@ setup_gnome() {
   EXISTING=$(gsettings get org.gnome.settings-daemon.plugins.media-keys custom-keybindings 2>/dev/null || echo "@as []")
   echo "   Atajos existentes: $EXISTING"
 
-  local TARGET="/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom-local-stt/"
-  if ! echo "$EXISTING" | grep -q "custom-local-stt"; then
-    local NEW_LIST
-    if [[ "$EXISTING" == "@as []" || "$EXISTING" == "[]" ]]; then
-      NEW_LIST="['$TARGET']"
-    else
-      NEW_LIST=$(echo "$EXISTING" | sed "s/]$/, '$TARGET']/")
+  for TARGET in \
+    "/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom-local-stt/" \
+    "/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom-local-stt-pick/"; do
+    if ! echo "$EXISTING" | grep -q "$(basename "$TARGET")"; then
+      local NEW_LIST
+      if [[ "$EXISTING" == "@as []" || "$EXISTING" == "[]" ]]; then
+        NEW_LIST="['$TARGET']"
+      else
+        NEW_LIST=$(echo "$EXISTING" | sed "s/]$/, '$TARGET']/")
+      fi
+      gsettings set org.gnome.settings-daemon.plugins.media-keys custom-keybindings "$NEW_LIST"
+      EXISTING="$NEW_LIST"
+      echo "   Añadido: $TARGET"
     fi
-    gsettings set org.gnome.settings-daemon.plugins.media-keys custom-keybindings "$NEW_LIST"
-    echo "   Lista actualizada: $NEW_LIST"
-  fi
 
-  gsettings set org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:"$TARGET" name 'Local STT Dictado'
-  gsettings set org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:"$TARGET" command "$BIN toggle"
-  gsettings set org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:"$TARGET" binding '<Super>f'
+    local NAME COMMAND BINDING
+    if [[ "$TARGET" == *"-pick/" ]]; then
+      NAME='Local STT Historial'; COMMAND="$BIN pick"; BINDING='<Super><shift>f'
+    else
+      NAME='Local STT Dictado'; COMMAND="$BIN toggle"; BINDING='<Super>f'
+    fi
+    gsettings set org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:"$TARGET" name "$NAME"
+    gsettings set org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:"$TARGET" command "$COMMAND"
+    gsettings set org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:"$TARGET" binding "$BINDING"
+  done
 
   echo ""
-  echo "✅ Atajo GNOME configurado: Super+F -> $BIN toggle"
+  echo "✅ Atajos GNOME configurados: Super+F -> dictado | Super+Shift+F -> historial"
   echo "   Prueba: presiona Win+F. Si no funciona, revisa Configuración → Teclado → Atajos personalizados."
 }
 

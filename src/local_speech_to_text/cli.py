@@ -181,6 +181,58 @@ def _check(ok: bool, label: str, ok_msg: str, err: str, warn: bool = False) -> b
     return ok or warn
 
 
+def _pick_tool() -> str | None:
+    """Devuelve el selector disponible: wofi (Wayland) o rofi (fallback)."""
+    import shutil
+
+    return next((t for t in ("wofi", "rofi") if shutil.which(t)), None)
+
+
+def cmd_pick(args):
+    """Abre wofi/rofi con las últimas transcripciones; la elegida se copia y pega."""
+    import shutil
+    import subprocess as sp
+
+    cfg = _config_from_args(args)
+    if not cfg.history_path.exists():
+        print("Sin historial todavía. Dicta algo primero (Win+F).")
+        sys.exit(1)
+    entries = [json.loads(ln) for ln in cfg.history_path.read_text().splitlines() if ln.strip()]
+    if not entries:
+        print("Historial vacío.")
+        sys.exit(1)
+    entries = entries[-args.count:]
+
+    tool = _pick_tool()
+    if tool is None:
+        print("❌ Falta wofi o rofi. Instala con: sudo pacman -S wofi")
+        sys.exit(1)
+
+    # mostramos la más reciente arriba; wofi devuelve el índice en la 1ª línea
+    lines = [e["text"].replace("\n", " ⏎ ") for e in reversed(entries)]
+    dmenu = sp.run(
+        [tool, "--dmenu", "-i", "-p", "Local STT · dictados"],
+        input="\n".join(lines), capture_output=True, text=True,
+        env={**os.environ, "_lines_count": str(len(lines))},
+    )
+    if dmenu.returncode != 0 or not dmenu.stdout.strip():
+        print("Cancelado.")
+        return
+    chosen = lines.index(dmenu.stdout.strip("\n"))
+    text = entries[-(chosen + 1)]["text"]
+
+    from .clipboard import copy_to_clipboard, notify, paste_via_key
+
+    copy_to_clipboard(text)
+    print(f"✅ {text[:120]}")
+    if args.paste:
+        time.sleep(0.15)
+        if paste_via_key():
+            print("(pegado con Ctrl+V)")
+    else:
+        notify("Copiado", text[:120], icon="edit-paste")
+
+
 def cmd_doctor(args):
     """Diagnóstico: GPU, daemon, modelo, atajo, clipboard, micro."""
     from .clipboard import notify  # noqa: F401
@@ -248,6 +300,10 @@ def cmd_doctor(args):
     ):
         failures += not _check(shutil.which(tool) is not None, tool, purpose,
                                f"Falta. Instala: sudo pacman -S {pkg}", warn=tool != "wl-copy")
+
+    picker = _pick_tool()
+    failures += not _check(picker is not None, "Selector (wofi/rofi)", picker or "",
+                           "Falta para `local-stt pick` (Win+Shift+F): sudo pacman -S wofi", warn=True)
 
     # 5b. Vocabulario y correcciones
     from .vocab import load_corrections, load_vocabulary
@@ -340,6 +396,12 @@ def main():
     h.add_argument("--copy", type=int, nargs="?", const=1, metavar="N",
                    help="Copiar al portapapeles la N-ésima (1=última). Solo: copia la última")
     h.set_defaults(func=cmd_history)
+
+    pk = sub.add_parser("pick", help="Selector visual (wofi/rofi) del historial → copia y pega")
+    pk.add_argument("--count", "-n", type=int, default=20, help="Cuántas mostrar (default 20)")
+    pk.add_argument("--no-paste", dest="paste", action="store_false",
+                    help="Solo copiar, no enviar Ctrl+V")
+    pk.set_defaults(func=cmd_pick, paste=True)
 
     dl = sub.add_parser("download", help="Pre-descarga el modelo (primer uso instantáneo)")
     dl.set_defaults(func=cmd_download)
