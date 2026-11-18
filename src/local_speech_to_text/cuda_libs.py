@@ -14,6 +14,10 @@ _PRELOAD = (
     "cublas/lib/libcublasLt.so.12",
 )
 
+# Instalación empaquetada (pacman/AUR): el PKGBUILD copia libcublas.so.12 y
+# libcublasLt.so.12 directamente en este directorio, sin subdirectorios.
+PACKAGED_CUBLAS_DIR = Path("/usr/lib/local-stt/cublas")
+
 
 def nvidia_pip_dir(site_packages: Path | None = None) -> Path:
     """Directorio `nvidia/` de los paquetes pip dentro de site-packages."""
@@ -21,19 +25,17 @@ def nvidia_pip_dir(site_packages: Path | None = None) -> Path:
     return base / "nvidia"
 
 
-def preload_cuda_libs(site_packages: Path | None = None) -> list[str]:
-    """Precarga libcublas 12 con RTLD_GLOBAL. Retorna las libs cargadas.
+def _candidatos(nv_dir: Path, packaged: Path) -> list[Path]:
+    """Rutas candidatas: primero el paquete pip, luego la instalación empaquetada."""
+    rutas = [nv_dir / rel for rel in _PRELOAD]
+    rutas += [packaged / Path(rel).name for rel in _PRELOAD]
+    return rutas
 
-    Es idempotente y no falla si no existe el paquete (CPU u otros SO).
-    Debe llamarse ANTES de crear el WhisperModel en CUDA.
-    """
-    nv_dir = nvidia_pip_dir(site_packages)
-    if not nv_dir.is_dir():
-        print(f"[cuda] {nv_dir} no existe: se omite preload (¿CPU o sin nvidia-cublas-cu12?)")
-        return []
+
+def _cargar_libs(rutas: list[Path]) -> list[str]:
+    """dlopen (RTLD_GLOBAL) cada lib existente; ignora fallos individuales."""
     loaded: list[str] = []
-    for rel in _PRELOAD:
-        lib = nv_dir / rel
+    for lib in rutas:
         if not lib.exists():
             continue
         try:
@@ -41,6 +43,26 @@ def preload_cuda_libs(site_packages: Path | None = None) -> list[str]:
             loaded.append(lib.name)
         except OSError as e:
             print(f"[cuda] no se pudo precargar {lib.name}: {e}")
+    return loaded
+
+
+def preload_cuda_libs(
+    site_packages: Path | None = None,
+    packaged_dir: Path | None = None,
+) -> list[str]:
+    """Precarga libcublas 12 con RTLD_GLOBAL. Retorna las libs cargadas.
+
+    Busca primero el paquete pip (site-packages/nvidia) y luego la instalación
+    empaquetada por pacman/AUR (por defecto /usr/lib/local-stt/cublas).
+    Es idempotente y no falla si ninguna existe (CPU u otros SO).
+    Debe llamarse ANTES de crear el WhisperModel en CUDA.
+    """
+    nv_dir = nvidia_pip_dir(site_packages)
+    packaged = packaged_dir or PACKAGED_CUBLAS_DIR
+    if not nv_dir.is_dir() and not packaged.is_dir():
+        print(f"[cuda] {nv_dir} no existe: se omite preload (¿CPU o sin nvidia-cublas-cu12?)")
+        return []
+    loaded = _cargar_libs(_candidatos(nv_dir, packaged))
     if loaded:
         print(f"[cuda] precargadas: {', '.join(loaded)}")
     return loaded
