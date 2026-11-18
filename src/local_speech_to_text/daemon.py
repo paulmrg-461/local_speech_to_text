@@ -40,6 +40,8 @@ class Daemon:
         self._partial_text = ""
         self._partial_thread: threading.Thread | None = None
         self._partial_busy = False
+        self._stream_text = ""  # segmentos ya transcritos (dictados largos)
+        self._stream_processed = 0  # muestras ya confirmadas
         self.wake_monitor = None  # WakeWordMonitor | None
         self.translate_mode = False  # dictar en un idioma -> salir en inglés
 
@@ -137,6 +139,8 @@ class Daemon:
     def _start_recording(self):
         self._ensure_model()
         self._partial_text = ""
+        self._stream_text = ""
+        self._stream_processed = 0
         # Auto-stop por tiempo máximo en hilo aparte
         self.recorder.start()
         if self.wake_monitor:
@@ -192,24 +196,42 @@ class Daemon:
             self._osd_proc = None
 
     def _start_partial_worker(self) -> None:
-        """Transcripción parcial en vivo (opcional, config partial_results)."""
+        """Parciales en vivo + streaming de ventanas para dictados largos.
+
+        Cuando el audio pendiente supera `stream_window` segundos se transcribe
+        y se "confirma" (commit) al texto acumulado; el OSD muestra acumulado +
+        parcial. Al parar solo se transcribe la cola final, no todo desde cero.
+        """
         if not getattr(self.config, "partial_results", True):
             return
 
         interval = getattr(self.config, "partial_interval", 1.5)
+        window = int(getattr(self.config, "stream_window", 12.0) * self.recorder.sample_rate)
 
         def _worker():
             while self.recorder.is_recording:
                 time.sleep(interval)
                 if not self.recorder.is_recording or self._partial_busy or not self.transcriber:
                     continue
+                audio = self.recorder.full_audio()
+                pending = audio[self._stream_processed:]
+                if pending.size < 16000:  # <1s: nada que hacer
+                    continue
                 self._partial_busy = True
                 try:
-                    audio = self.recorder.snapshot(max_seconds=10)
-                    if audio.size > 16000:  # mínimo ~1s
-                        partial = self.transcriber.transcribe_partial(audio, self.recorder.sample_rate)
-                        if partial:
-                            self._partial_text = partial
+                    part = self.transcriber.transcribe_partial(pending, self.recorder.sample_rate)
+                    if not self.recorder.is_recording:
+                        continue  # paró durante la transcripción: lo maneja el stop
+                    with self._lock:
+                        if not self.recorder.is_recording:
+                            continue  # segundo check: el stop entró mientras esperábamos el lock
+                        if pending.size >= window and getattr(self.config, "streaming", True):
+                            if part:
+                                self._stream_text = (self._stream_text + " " + part).strip()
+                            self._stream_processed = audio.size
+                        else:
+                            live = (self._stream_text + " " + part).strip() if part else self._stream_text
+                            self._partial_text = live
                 except Exception as e:
                     print(f"[daemon] parcial: {e}")
                 finally:
@@ -257,7 +279,8 @@ class Daemon:
         duration = recording.samples.size / recording.sample_rate
         print(f"[daemon] Audio {duration:.2f}s, transcribiendo...")
         t0 = time.time()
-        raw = self.transcriber.transcribe(recording.samples, recording.sample_rate) if self.transcriber else ""
+        raw = self._final_transcription(recording)
+        text = clean_text(raw) if self.config.dictation_commands else raw
         text = clean_text(raw) if self.config.dictation_commands else raw
         if self.corrections:
             text = apply_corrections(text, self.corrections)
@@ -286,6 +309,23 @@ class Daemon:
                 print("[daemon] Auto-paste enviado (Ctrl+V)")
             else:
                 print("[daemon] Haz Ctrl+V para pegar")
+
+    def _final_transcription(self, recording) -> str:
+        """Texto final: cola pendiente si hubo streaming; paso completo si fue corto."""
+        if not self.transcriber:
+            return ""
+        streaming = getattr(self.config, "streaming", True) and self._stream_text
+        if not streaming:
+            return self.transcriber.transcribe(recording.samples, recording.sample_rate)
+        # dictado largo: solo transcribir lo pendiente desde el último commit
+        audio = self.recorder.full_audio()
+        tail = audio[self._stream_processed:]
+        print(f"[daemon] streaming: {self._stream_processed / recording.sample_rate:.0f}s ya confirmados, "
+              f"cola {tail.size / recording.sample_rate:.1f}s")
+        tail_text = ""
+        if tail.size > recording.sample_rate // 2:  # >0.5s
+            tail_text = self.transcriber.transcribe(tail, recording.sample_rate)
+        return (self._stream_text + " " + tail_text).strip()
 
     def _save_history(self, text: str) -> None:
         """Añade al historial JSONL (máx. 100 entradas, la última al final)."""

@@ -134,6 +134,13 @@ class AudioRecorder:
         limit = int(max_seconds * self.sample_rate)
         return audio[-limit:] if audio.size > limit else audio
 
+    def full_audio(self) -> np.ndarray:
+        """Copia thread-safe de TODO el audio grabado hasta ahora."""
+        with self._buf_lock:
+            if not self._buffers:
+                return np.zeros((0,), dtype=np.float32)
+            return np.concatenate(self._buffers, axis=0).flatten().astype(np.float32)
+
     @staticmethod
     def list_devices():
         """Lista de dispositivos (DeviceList de sounddevice, imprime como tabla)."""

@@ -49,6 +49,8 @@ _ENV_MAP = {
     "wake_word_model": "LOCAL_STT_WAKE_MODEL",
     "wake_word_threshold": "LOCAL_STT_WAKE_THRESHOLD",
     "numbers_to_digits": "LOCAL_STT_NUMBERS",
+    "streaming": "LOCAL_STT_STREAMING",
+    "stream_window": "LOCAL_STT_STREAM_WINDOW",
 }
 
 _DEFAULTS = {
@@ -72,6 +74,8 @@ _DEFAULTS = {
     "wake_word_model": "hey_jarvis",  # o ruta a .onnx custom
     "wake_word_threshold": 0.5,
     "numbers_to_digits": False,  # true: "tres coma catorce" -> 3,14 (opinional, ver README)
+    "streaming": True,  # dictados largos: confirma ventanas y solo transcribe la cola
+    "stream_window": 12.0,  # segundos por ventana confirmada
     "auto_copy": True,
 }
 
@@ -120,6 +124,8 @@ class Config:
     wake_word_model: str = "hey_jarvis"
     wake_word_threshold: float = 0.5
     numbers_to_digits: bool = False
+    streaming: bool = True  # dictados largos: confirma ventanas, al parar solo transcribe la cola
+    stream_window: float = 12.0
     # {regex de ventana: archivo de vocabulario} — vocabulario contextual por app
     app_vocab: dict[str, str] = field(default_factory=dict)
     vocabulary_file: Path = _default_vocab_path()
@@ -159,6 +165,8 @@ def _apply_env(data: dict) -> None:
         elif key == "partial_interval":
             data[key] = float(raw)
         elif key == "wake_word_threshold":
+            data[key] = float(raw)
+        elif key == "stream_window":
             data[key] = float(raw)
         elif key in ("vocabulary_file", "corrections_file"):
             data[key] = Path(raw).expanduser()
