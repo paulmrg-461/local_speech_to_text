@@ -48,6 +48,7 @@ class Daemon:
             print("[daemon] Cargando modelo en VRAM... (primera vez tarda ~10-20s)")
             notify("Local STT", "Cargando modelo en GPU... primera vez puede tardar")
             vocab = load_vocabulary(self.config.vocabulary_file)
+            self._default_prompt = vocab or None
             self.corrections = load_corrections(self.config.corrections_file)
             if vocab:
                 print(f"[daemon] Vocabulario activo ({len(vocab.split(', '))} términos)")
@@ -62,6 +63,7 @@ class Daemon:
                 vad_filter=self.config.vad_filter,
                 initial_prompt=vocab or None,
             )
+            self.transcriber.initial_prompt = self._default_prompt
             self.transcriber.task = "translate" if self.translate_mode else "transcribe"
             notify("Local STT", f"Modelo {self.config.model} listo en {self.config.device}")
 
@@ -102,6 +104,36 @@ class Daemon:
             self.wake_monitor.stop()
             self.wake_monitor = None
 
+    def _apply_contextual_vocab(self) -> None:
+        """Vocabulario según la app enfocada (config app_vocab).
+
+        La detección va en un hilo: kdotool es instantáneo, pero el DBus de
+        KWin puede tardar/pedir interacción. El prompt se cambia al vuelo
+        antes de la transcripción final (que ocurre al parar).
+        """
+        profiles = getattr(self.config, "app_vocab", None) or {}
+        if not profiles or not self.transcriber:
+            return
+        from .active_window import get_active_window_name, match_profile
+        from .config import _resolve_vocab
+        from .vocab import load_vocabulary
+
+        def _detect():
+            try:
+                window = get_active_window_name()
+                profile = match_profile(window, profiles)
+                if profile:
+                    prompt = load_vocabulary(_resolve_vocab(profile))
+                    print(f"[daemon] vocabulario contextual '{profile}' (ventana: {(window or '')[:60]})")
+                    self.transcriber.initial_prompt = prompt or self._default_prompt
+                else:
+                    print(f"[daemon] sin perfil para '{(window or '?')[:60]}': vocabulario por defecto")
+                    self.transcriber.initial_prompt = self._default_prompt
+            except Exception as e:
+                print(f"[daemon] detección de ventana falló: {e}")
+
+        threading.Thread(target=_detect, daemon=True).start()
+
     def _start_recording(self):
         self._ensure_model()
         self._partial_text = ""
@@ -109,6 +141,7 @@ class Daemon:
         self.recorder.start()
         if self.wake_monitor:
             self.wake_monitor.pause()  # no re-disparar mientras dictas
+        self._apply_contextual_vocab()
         play_sound("start")
         self._launch_osd()
         self._start_partial_worker()

@@ -311,6 +311,14 @@ def cmd_doctor(args):
     failures += not _check(picker is not None, "Selector (wofi/rofi)", picker or "",
                            "Falta para `local-stt pick` (Win+Shift+F): sudo pacman -S wofi", warn=True)
 
+    # 5d. Detección de ventana activa (vocabulario contextual)
+    from .active_window import get_active_window_name
+
+    window = get_active_window_name()
+    failures += not _check(window is not None, "Ventana activa", f"'{window[:60]}'" if window else "",
+                           "Sin kdotool/xdotool el vocabulario contextual usará el default. "
+                           "Exacto en KDE: yay -S kdotool", warn=True)
+
     # 5b. Vocabulario y correcciones
     from .vocab import load_corrections, load_vocabulary
 

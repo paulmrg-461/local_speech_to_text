@@ -150,6 +150,21 @@ overlay = false         # no OSD at all
 partial_results = false  # OSD without live text
 ```
 
+### Contextual vocabulary per app (optional)
+
+Use a different vocabulary depending on which window is focused (e.g. jargon when dictating in your IDE, casual terms in a chat app):
+
+```toml
+[app_vocab]
+"code|jetbrains|vscode|nvim|terminal" = "vocab-ide.txt"   # regex -> file
+"whatsapp|telegram" = "vocab-chat.txt"
+```
+
+Files live in `~/.config/local-stt/` (same one-term-per-line format) and are
+applied on the fly when the dictation starts. Detection chain: `kdotool`
+(exact on KDE Wayland — `yay -S kdotool`) → KWin DBus (best-effort) →
+`xdotool` (X11). Without any of these, the default vocabulary is used.
+
 ### Hands-free wake word (optional)
 
 ```bash

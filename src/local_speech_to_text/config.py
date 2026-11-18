@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass, fields
+from dataclasses import dataclass, field, fields
 from pathlib import Path
 
 try:  # Python 3.11+; en 3.10 se ignora el archivo de config
@@ -85,8 +85,14 @@ def _default_corrections_path() -> Path:
     base = os.environ.get("XDG_CONFIG_HOME", "~/.config")
     return Path(base).expanduser() / "local-stt" / "corrections.txt"
 
+
+def _resolve_vocab(name: str) -> Path:
+    """Nombres relativos se resuelven contra ~/.config/local-stt/."""
+    p = Path(name).expanduser()
+    return p if p.is_absolute() else _default_corrections_path().parent / p
+
 # Claves aceptadas en el TOML (todo lo demás se ignora)
-_TOML_KEYS = set(_ENV_MAP) | {"sample_rate", "auto_copy"}
+_TOML_KEYS = set(_ENV_MAP) | {"sample_rate", "auto_copy", "app_vocab"}
 
 
 @dataclass(frozen=True)
@@ -114,6 +120,8 @@ class Config:
     wake_word_model: str = "hey_jarvis"
     wake_word_threshold: float = 0.5
     numbers_to_digits: bool = False
+    # {regex de ventana: archivo de vocabulario} — vocabulario contextual por app
+    app_vocab: dict[str, str] = field(default_factory=dict)
     vocabulary_file: Path = _default_vocab_path()
     corrections_file: Path = _default_corrections_path()
     socket_path: Path = Path(os.environ.get("LOCAL_STT_SOCKET", "/tmp/local-stt.sock"))
