@@ -96,6 +96,21 @@ partial_results = false # sin texto en vivo
 Edita `~/.config/local-stt/config.toml` y ejecuta `local-stt reload`
 (modelo/idioma/vocab/correcciones al vuelo; el modelo solo se recarga si cambió).
 
+### Manos libres: wake word (opcional)
+
+```bash
+.venv/bin/pip install 'local-speech-to-text[wakeword]'   # openwakeword + onnxruntime
+```
+
+```toml
+wake_word = true          # di "hey jarvis" y el dictado empieza solo
+wake_word_model = "hey_jarvis"   # alexa, hey_mycroft... o ruta a .onnx custom
+wake_word_threshold = 0.5
+```
+
+El micrófono queda escuchando en CPU (~0% GPU). Durante el dictado se pausa
+para no re-dispararse. Apagado por defecto: `wake_word = false` + `local-stt reload`.
+
 ### Atajo manual (si el script no te lo configuró)
 
 **KDE Plasma 6 (default):** **Ajustes del sistema → Atajos → Atajos personalizados → Añadir → Orden/URL**

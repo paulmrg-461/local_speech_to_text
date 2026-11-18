@@ -45,6 +45,9 @@ _ENV_MAP = {
     "overlay": "LOCAL_STT_OVERLAY",
     "partial_results": "LOCAL_STT_PARTIAL",
     "partial_interval": "LOCAL_STT_PARTIAL_SECS",
+    "wake_word": "LOCAL_STT_WAKE_WORD",
+    "wake_word_model": "LOCAL_STT_WAKE_MODEL",
+    "wake_word_threshold": "LOCAL_STT_WAKE_THRESHOLD",
 }
 
 _DEFAULTS = {
@@ -64,6 +67,9 @@ _DEFAULTS = {
     "overlay": True,  # OSD flotante con nivel de voz al grabar
     "partial_results": True,  # transcripción parcial en vivo (se muestra en el OSD)
     "partial_interval": 1.5,  # segundos entre parciales
+    "wake_word": False,  # true: "hey jarvis" arranca el dictado sin teclado
+    "wake_word_model": "hey_jarvis",  # o ruta a .onnx custom
+    "wake_word_threshold": 0.5,
     "auto_copy": True,
 }
 
@@ -102,6 +108,9 @@ class Config:
     overlay: bool = True
     partial_results: bool = True
     partial_interval: float = 1.5
+    wake_word: bool = False
+    wake_word_model: str = "hey_jarvis"
+    wake_word_threshold: float = 0.5
     vocabulary_file: Path = _default_vocab_path()
     corrections_file: Path = _default_corrections_path()
     socket_path: Path = Path(os.environ.get("LOCAL_STT_SOCKET", "/tmp/local-stt.sock"))
@@ -137,6 +146,8 @@ def _apply_env(data: dict) -> None:
         elif key == "silence_rms":
             data[key] = float(raw)
         elif key == "partial_interval":
+            data[key] = float(raw)
+        elif key == "wake_word_threshold":
             data[key] = float(raw)
         elif key in ("vocabulary_file", "corrections_file"):
             data[key] = Path(raw).expanduser()

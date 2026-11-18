@@ -68,6 +68,7 @@ silence_threshold_ms = 1500
 overlay = true             # OSD flotante con nivel de voz mientras grabas
 partial_results = true     # texto parcial en vivo dentro del OSD
 partial_interval = 1.5     # segundos entre parciales
+# wake_word = true         # manos libres: di "hey jarvis" (requiere pip install 'local-speech-to-text[wakeword]')
 EOF
 else
   echo "   ya existe, no se toca"

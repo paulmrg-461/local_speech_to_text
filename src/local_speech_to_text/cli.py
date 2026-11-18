@@ -314,6 +314,16 @@ def cmd_doctor(args):
            "")  # siempre OK: es opcional
     _check(True, "Correcciones", f"{n_corr} reglas en {cfg.corrections_file}", "")
 
+    # 5c. Wake word (opcional)
+    try:
+        import openwakeword  # noqa: F401
+        import onnxruntime  # noqa: F401
+
+        _check(True, "Wake word", f"deps OK (modelo {cfg.wake_word_model})" +
+               (", ACTIVO" if cfg.wake_word else ", apagado (wake_word = true para activar)"), "")
+    except ImportError:
+        _check(False, "Wake word", "", "Opcional. Instala: .venv/bin/pip install 'local-speech-to-text[wakeword]'", warn=True)
+
     # 6. Atajo
     hotkey = (Path.home() / ".config" / "khotkeysrc")
     configured = hotkey.exists() and "Local STT" in hotkey.read_text()

@@ -40,6 +40,7 @@ class Daemon:
         self._partial_text = ""
         self._partial_thread: threading.Thread | None = None
         self._partial_busy = False
+        self.wake_monitor = None  # WakeWordMonitor | None
 
     def _ensure_model(self):
         if self.transcriber is None:
@@ -69,11 +70,43 @@ class Daemon:
             else:
                 self._stop_and_transcribe()
 
+    def _maybe_start_wake_word(self) -> None:
+        """Arranca el monitor de wake word si config.wake_word está activo."""
+        if self.wake_monitor or not self.config.wake_word:
+            return
+        try:
+            from .wakeword import WakeWordMonitor, resolve_model_path
+
+            monitor = WakeWordMonitor(
+                on_wake=self._on_wake,
+                model_path=resolve_model_path(self.config.wake_word_model),
+                threshold=self.config.wake_word_threshold,
+                sample_rate=self.config.sample_rate,
+            )
+            if monitor.start():
+                self.wake_monitor = monitor
+                notify("Local STT", f"Manos libres: di '{self.config.wake_word_model}' para dictar")
+        except Exception as e:
+            print(f"[daemon] wake word no arrancó: {e}")
+
+    def _on_wake(self) -> None:
+        """Llamado desde el hilo del monitor: arranca dictado si no hay ya uno."""
+        with self._lock:
+            if not self.recorder.is_recording:
+                self._start_recording()
+
+    def _stop_wake_word(self) -> None:
+        if self.wake_monitor:
+            self.wake_monitor.stop()
+            self.wake_monitor = None
+
     def _start_recording(self):
         self._ensure_model()
         self._partial_text = ""
         # Auto-stop por tiempo máximo en hilo aparte
         self.recorder.start()
+        if self.wake_monitor:
+            self.wake_monitor.pause()  # no re-disparar mientras dictas
         play_sound("start")
         self._launch_osd()
         self._start_partial_worker()
@@ -164,6 +197,8 @@ class Daemon:
         self._kill_osd()
         recording = self.recorder.stop()
         self._partial_text = ""
+        if self.wake_monitor:
+            self.wake_monitor.resume()
         play_sound("stop")
 
         if recording.samples.size < 800:  # <50ms a 16kHz
@@ -234,6 +269,12 @@ class Daemon:
 
             self.corrections = load_corrections(new.corrections_file)
             print("[daemon] Config recargada en caliente (modelo sin cambios)")
+        # wake word: aplicar cambio al vuelo
+        if new.wake_word and not self.wake_monitor:
+            self._maybe_start_wake_word()
+        elif not new.wake_word and self.wake_monitor:
+            print("[daemon] Wake word desactivado")
+            self._stop_wake_word()
         return f"ok recargado: model={new.model} lang={new.language or 'auto'}"
 
     # --- Socket IPC para toggle desde atajo ---
@@ -321,6 +362,8 @@ class Daemon:
         self._server_thread = threading.Thread(target=self._serve, daemon=True)
         self._server_thread.start()
 
+        self._maybe_start_wake_word()
+
         notify("Local STT", f"Daemon listo. Presiona Win+F para dictar ({self.config.model} en {self.config.device})")
         print(f"[daemon] Listo. Modelo {self.config.model} en {self.config.device}. Presiona Win+F (o: local-stt toggle)")
         print(f"[daemon] Socket: {self._sock_path} | PID: {os.getpid()}")
@@ -336,6 +379,7 @@ class Daemon:
         print("[daemon] Saliendo...")
         self._running = False
         self._kill_osd()
+        self._stop_wake_word()
         if self.recorder.is_recording:
             try:
                 self.recorder.stop()
