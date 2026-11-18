@@ -13,12 +13,14 @@ dependencies = [
     "soundfile>=0.12.1",
     "numpy>=1.24",
     "pyperclip>=1.8",
+    # ctranslate2 (wheel) está compilado para CUDA 12 y hace dlopen de libcublas.so.12
+    # en runtime. Arch instala CUDA 13, así que traemos cuBLAS 12 vía pip y la
+    # precargamos con ctypes (ver cuda_libs.py).
+    "nvidia-cublas-cu12>=12.6",
 ]
 
 [project.optional-dependencies]
-cuda = [
-    # Para RTX 5070 (Blackwell) asegura CUDA 12.8+. faster-whisper ya trae ctranslate2 con CUDA
-]
+dev = ["pytest>=8.0"]
 
 [project.scripts]
 local-stt = "local_speech_to_text.cli:main"

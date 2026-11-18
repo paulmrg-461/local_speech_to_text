@@ -36,15 +36,22 @@ class Transcriber:
                 "Para CUDA: asegúrate de tener CUDA 12.x y cuDNN instalados."
             ) from e
 
-        # RTX 5070 Blackwell necesita CUDA 12.8+. Si no hay GPU, fallback a CPU
+        # RTX 5070 Blackwell necesita CUDA 12.8+. Si no hay GPU, fallback a CPU.
+        # ctranslate2 hace dlopen de libcublas.so.12: precargamos la del paquete
+        # pip (Arch instala CUDA 13 y no la tiene).
+        if self.device == "cuda":
+            from .cuda_libs import preload_cuda_libs
+
+            preload_cuda_libs()
+
         device = self.device
         compute = self.compute_type
         if device == "cuda":
-            # Verificación rápida: si nvidia-smi falla, faster-whisper caerá igual, pero intentamos
             try:
-                import ctranslate2  # noqa: F401
+                import ctranslate2
 
-                # Intentar crear en cuda, si falla -> cpu
+                if ctranslate2.get_cuda_device_count() < 1:
+                    raise RuntimeError("No hay dispositivos CUDA")
                 self._model = WhisperModel(
                     self.model_name, device="cuda", compute_type=compute, download_root=None
                 )

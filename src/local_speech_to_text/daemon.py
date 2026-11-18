@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import json
 import os
 import signal
 import socket
 import struct
 import threading
 import time
+from datetime import datetime
 from pathlib import Path
 
 import numpy as np
@@ -13,6 +15,7 @@ import numpy as np
 from .clipboard import copy_to_clipboard, notify, paste_via_key, play_sound
 from .config import Config
 from .recorder import AudioRecorder
+from .text_cleaner import clean_text
 from .transcriber import Transcriber
 
 
@@ -21,7 +24,9 @@ class Daemon:
 
     def __init__(self, config: Config | None = None):
         self.config = config or Config()
-        self.recorder = AudioRecorder(sample_rate=self.config.sample_rate)
+        self.recorder = AudioRecorder(
+            sample_rate=self.config.sample_rate, silence_rms=self.config.silence_rms
+        )
         self.transcriber: Transcriber | None = None
         self._lock = threading.Lock()
         self._sock_path = self.config.socket_path
@@ -59,11 +64,22 @@ class Daemon:
 
         def _watchdog():
             while self.recorder.is_recording:
-                if self.recorder.elapsed > self.config.max_record_seconds:
+                elapsed = self.recorder.elapsed
+                # Auto-stop por silencio (opcional) o por tiempo máximo
+                if self.config.silence_stop and elapsed > 1.0:
+                    if self.recorder.silent_ms >= self.config.silence_threshold_ms:
+                        print("[daemon] Silencio detectado, parando")
+                        with self._lock:
+                            if self.recorder.is_recording:
+                                self._stop_and_transcribe()
+                        return
+                if elapsed > self.config.max_record_seconds:
                     print("[daemon] Máximo tiempo alcanzado, parando")
-                    self.toggle()
-                    break
-                time.sleep(0.5)
+                    with self._lock:
+                        if self.recorder.is_recording:
+                            self._stop_and_transcribe()
+                    return
+                time.sleep(0.25)
 
         threading.Thread(target=_watchdog, daemon=True).start()
 
@@ -80,13 +96,17 @@ class Daemon:
 
         duration = recording.samples.size / recording.sample_rate
         print(f"[daemon] Audio {duration:.2f}s, transcribiendo...")
-        text = self.transcriber.transcribe(recording.samples, recording.sample_rate) if self.transcriber else ""
+        t0 = time.time()
+        raw = self.transcriber.transcribe(recording.samples, recording.sample_rate) if self.transcriber else ""
+        text = clean_text(raw) if self.config.dictation_commands else raw
+        print(f"[daemon] Transcrito en {time.time() - t0:.2f}s")
 
         if not text.strip():
             notify("Local STT", "No se entendió audio (silencio/ruido)", urgency="critical")
             print("[daemon] Transcripción vacía")
             return
 
+        self._save_history(text)
         print(f"[daemon] ✅ Texto: {text}")
         ok = copy_to_clipboard(text)
         if ok:
@@ -102,6 +122,20 @@ class Daemon:
                 print("[daemon] Auto-paste enviado (Ctrl+V)")
             else:
                 print("[daemon] Haz Ctrl+V para pegar")
+
+    def _save_history(self, text: str) -> None:
+        """Añade al historial JSONL (máx. 100 entradas, la última al final)."""
+        try:
+            path: Path = self.config.history_path
+            path.parent.mkdir(parents=True, exist_ok=True)
+            entry = json.dumps({"ts": datetime.now().isoformat(timespec="seconds"), "text": text}, ensure_ascii=False)
+            lines = []
+            if path.exists():
+                lines = [ln for ln in path.read_text().splitlines() if ln.strip()]
+            lines.append(entry)
+            path.write_text("\n".join(lines[-100:]) + "\n")
+        except Exception as e:
+            print(f"[daemon] historial no guardado: {e}")
 
     # --- Socket IPC para toggle desde atajo ---
     def _serve(self):
@@ -132,7 +166,11 @@ class Daemon:
             with conn:
                 try:
                     data = conn.recv(1024).decode().strip()
-                    if data in ("toggle", "start", "stop", ""):
+                    if data == "start":
+                        if not self.recorder.is_recording:
+                            self.toggle()
+                        conn.sendall(b"ok\n")
+                    elif data in ("stop", "toggle", ""):
                         self.toggle()
                         conn.sendall(b"ok\n")
                     elif data == "status":
@@ -153,6 +191,13 @@ class Daemon:
             pass
 
     def start(self):
+        try:  # log en tiempo real cuando la salida va a archivo/journal
+            import sys
+
+            sys.stdout.reconfigure(line_buffering=True)
+            sys.stderr.reconfigure(line_buffering=True)
+        except Exception:
+            pass
         self._ensure_model()
         self._running = True
         # Escribir pid

@@ -1,17 +1,16 @@
 [Unit]
-Description=Local STT Daemon (RTX 5070) - Win+F dictado local
+Description=Local STT Daemon (RTX 5070) - Win+F dictado
 After=graphical-session.target pipewire.service
-Wants=pipewire.service
 
 [Service]
 Type=simple
+# La ruta absoluta se ajusta al instalar (scripts/install.sh copia este archivo
+# a ~/.config/systemd/user/). La config se lee de ~/.config/local-stt/config.toml
 ExecStart=%h/Documents/dev_projects/DevPaul/local_speech_to_text/.venv/bin/local-stt daemon
 Restart=on-failure
 RestartSec=3
-Environment=LOCAL_STT_MODEL=large-v3-turbo
-Environment=LOCAL_STT_DEVICE=cuda
-Environment=LOCAL_STT_COMPUTE=float16
-Environment=LOCAL_STT_LANG=es
+Environment=PYTHONUNBUFFERED=1
+EnvironmentFile=-%h/.config/local-stt/config.env
 
 [Install]
 WantedBy=default.target

@@ -27,7 +27,7 @@ python3 -m venv .venv
 source .venv/bin/activate
 pip install --upgrade pip wheel
 
-echo "→ Instalando paquete + deps..."
+echo "→ Instalando paquete + deps (incluye nvidia-cublas-cu12 para CUDA en Arch)..."
 pip install -e .
 
 # Verificar CUDA
@@ -38,7 +38,7 @@ if command -v nvidia-smi &>/dev/null && nvidia-smi &>/dev/null; then
   echo "   GPU detectada. Modelo large-v3-turbo usará ~3-4GB VRAM en float16."
 else
   echo "⚠️  nvidia-smi no disponible ahora. En tu máquina con RTX 5070 debería aparecer."
-  echo "   Si usas CUDA, asegúrate de tener nvidia-drivers + cuda 12.8+ instalados."
+  echo "   Si actualizaste nvidia-utils hace poco: REINICIA el equipo."
   echo "   El daemon hará fallback a CPU si no hay GPU."
 fi
 
@@ -47,7 +47,29 @@ echo "→ Probando import..."
 python -c "import sounddevice; print('sounddevice OK:', sounddevice.query_devices().__str__()[:200])" || echo "   sounddevice fallo (normal si no hay audio en este entorno)"
 python -c "import faster_whisper; print('faster-whisper OK')" || echo "   faster-whisper no instalado? revisa pip"
 
-echo ""
+# Config editable: ~/.config/local-stt/config.toml (env sigue ganando)
+echo "→ Escribiendo config ~/.config/local-stt/config.toml..."
+mkdir -p ~/.config/local-stt
+CFG=~/.config/local-stt/config.toml
+if [[ ! -f "$CFG" ]]; then
+cat > "$CFG" <<EOF
+# Config de local-stt (el entorno LOCAL_STT_* gana sobre este archivo)
+# Modelos: tiny, base, small, medium, large-v3, large-v3-turbo, distil-large-v3
+model = "large-v3-turbo"   # sweet spot RTX 5070 12GB
+language = "es"            # "auto" para autodetectar
+device = "cuda"
+compute_type = "float16"
+beam_size = 5
+max_record_seconds = 120
+auto_paste = true
+dictation_commands = true  # "punto y coma" -> ;  "nueva línea" -> salto
+silence_stop = false       # true: para solo tras 1.5s de silencio (manos libres)
+silence_threshold_ms = 1500
+EOF
+else
+  echo "   ya existe, no se toca"
+fi
+
 echo "→ Instalando servicio systemd --user..."
 mkdir -p ~/.config/systemd/user
 cat > ~/.config/systemd/user/local-stt.service <<EOF
@@ -60,27 +82,28 @@ Type=simple
 ExecStart=$(pwd)/.venv/bin/local-stt daemon
 Restart=on-failure
 RestartSec=3
-Environment=LOCAL_STT_MODEL=large-v3-turbo
-Environment=LOCAL_STT_DEVICE=cuda
-Environment=LOCAL_STT_COMPUTE=float16
+# Opcional: overrides de entorno (ganan sobre config.toml)
+EnvironmentFile=-%h/.config/local-stt/config.env
 
 [Install]
 WantedBy=default.target
 EOF
 systemctl --user daemon-reload || true
 
+# Pre-descargar el modelo para que el primer dictado no espere
+echo ""
+echo "→ Pre-descargando modelo (una sola vez, ~1.5GB)..."
+"$(pwd)/.venv/bin/local-stt" download || echo "   ⚠️  descarga falló: se descargará al primer uso"
+
 echo ""
 echo "✅ Instalación base completa."
 echo ""
 echo "Próximos pasos:"
 echo "  1. Configurar atajo Win+F:  ./scripts/setup-hotkey.sh"
-echo "  2. Iniciar daemon:         .venv/bin/local-stt daemon"
-echo "     (o como servicio:       systemctl --user enable --now local-stt)"
-echo "  3. Presiona Win+F, habla, Win+F de nuevo -> se copia y pega con Ctrl+V"
-echo "  4. Listar micros:          .venv/bin/local-stt devices"
-echo "  5. Probar archivo:         .venv/bin/local-stt transcribe audio.wav --copy"
+echo "  2. Iniciar daemon:         systemctl --user enable --now local-stt"
+echo "     (o probar en foreground: .venv/bin/local-stt daemon)"
+echo "  3. Diagnóstico completo:   .venv/bin/local-stt doctor"
+echo "  4. Presiona Win+F, habla, Win+F de nuevo -> se copia y pega con Ctrl+V"
 echo ""
-echo "Tips RTX 5070:"
-echo "  - Modelos: tiny(1GB) < base < small < medium(5GB) < large-v3-turbo(6GB, recomendado) < large-v3(10GB)"
-echo "  - Si VRAM justa, usa: LOCAL_STT_MODEL=medium LOCAL_STT_COMPUTE=int8_float16"
-echo "  - Cambia idioma: LOCAL_STT_LANG=en  o  auto para autodetectar"
+echo "Cambiar modelo/idioma: edita ~/.config/local-stt/config.toml y reinicia:"
+echo "  systemctl --user restart local-stt"

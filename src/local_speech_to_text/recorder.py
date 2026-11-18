@@ -23,17 +23,19 @@ class Recording:
 class AudioRecorder:
     """Grabación con sounddevice. Soporta toggle y VAD simple por energía."""
 
-    def __init__(self, sample_rate: int = 16000, channels: int = 1):
+    def __init__(self, sample_rate: int = 16000, channels: int = 1, silence_rms: float = 0.008):
         if sd is None:
             raise RuntimeError("Falta 'sounddevice'. Instala con: pip install sounddevice soundfile")
         self.sample_rate = sample_rate
         self.channels = channels
+        self.silence_rms = silence_rms
         self._queue: queue.Queue[np.ndarray] = queue.Queue()
         self._recording = False
         self._stream: sd.InputStream | None = None
         self._thread: threading.Thread | None = None
         self._buffers: list[np.ndarray] = []
         self._start_time: float = 0
+        self._last_voice_time: float = 0
 
     def _callback(self, indata, frames, time_info, status):  # noqa: ANN001
         if status:
@@ -47,6 +49,7 @@ class AudioRecorder:
         self._queue = queue.Queue()
         self._recording = True
         self._start_time = time.time()
+        self._last_voice_time = self._start_time
         self._stream = sd.InputStream(
             samplerate=self.sample_rate,
             channels=self.channels,
@@ -59,9 +62,13 @@ class AudioRecorder:
             while self._recording:
                 try:
                     chunk = self._queue.get(timeout=0.1)
-                    self._buffers.append(chunk)
                 except queue.Empty:
                     continue
+                self._buffers.append(chunk)
+                # RMS del chunk: si supera el umbral hay voz (para auto-stop por silencio)
+                rms = float(np.sqrt(np.mean(np.square(chunk))))
+                if rms >= self.silence_rms:
+                    self._last_voice_time = time.time()
 
         self._thread = threading.Thread(target=_drain, daemon=True)
         self._thread.start()
@@ -103,11 +110,19 @@ class AudioRecorder:
             return 0
         return time.time() - self._start_time
 
+    @property
+    def silent_ms(self) -> float:
+        """ms desde la última vez que se detectó voz (RMS sobre el umbral)."""
+        if not self._recording:
+            return 0
+        return max(0.0, (time.time() - self._last_voice_time) * 1000)
+
     @staticmethod
-    def list_devices() -> str:
+    def list_devices():
+        """Lista de dispositivos (DeviceList de sounddevice, imprime como tabla)."""
         if sd is None:
             return "sounddevice no instalado"
-        return str(sd.query_devices())
+        return sd.query_devices()
 
     @staticmethod
     def save_wav(path: str, recording: Recording) -> None:
