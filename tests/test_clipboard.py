@@ -44,15 +44,23 @@ def test_copy_falla_tras_reintentos(monkeypatch, capsys):
     assert "no llegó" in capsys.readouterr().out
 
 
-@pytest.mark.parametrize("backend", ["wl-copy", "xclip", "xsel"])
+@pytest.mark.parametrize("backend", [("wl-copy", "wl-paste"), ("xclip", "xclip"), ("xsel", "xsel")])
 def test_read_clipboard_preferencia_de_backends(monkeypatch, backend):
     import subprocess as sp
 
-    monkeypatch.setattr(cb.shutil, "which", lambda c: c == backend)
+    copy_tool, read_tool = backend
+    monkeypatch.setattr(cb.shutil, "which", lambda c: c == read_tool)
 
     class FakeResult:
         returncode = 0
         stdout = "leído".encode()
 
-    monkeypatch.setattr(sp, "run", lambda *a, **k: FakeResult())
+    seen = {}
+
+    def fake_run(cmd, *a, **k):
+        seen["cmd"] = cmd
+        return FakeResult()
+
+    monkeypatch.setattr(sp, "run", fake_run)
     assert cb._read_clipboard() == "leído"
+    assert seen["cmd"][0] == read_tool
