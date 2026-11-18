@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import shutil
 import subprocess
 import sys
 import time
@@ -364,6 +365,95 @@ def _cheatsheet() -> str:
 """
 
 
+def _strip_gnome_bindings(existing: str) -> str:
+    """Quita nuestras entradas de la lista gsettings de atajos GNOME."""
+    import re
+
+    paths = re.findall(r"'([^']+)'", existing)
+    kept = [p for p in paths if "local-stt" not in p]
+    if not kept:
+        return "@as []"
+    return "[" + ", ".join(f"'{p}'" for p in kept) + "]"
+
+
+def cmd_update(args):
+    """Auto-actualiza: git pull -> pip install -e . -> tests -> restart daemon."""
+    repo = Path(__file__).resolve().parents[2]
+    git = lambda *a: subprocess.run(["git", "-C", str(repo), *a], capture_output=True, text=True, timeout=120)
+
+    print(f"→ git pull en {repo}")
+    pull = git("pull", "--ff-only")
+    if pull.returncode != 0:
+        print(f"❌ No se pudo actualizar (¿cambios locales?):\n{pull.stderr.strip()}")
+        sys.exit(1)
+    print(pull.stdout.strip() or "   ya estabas al día")
+
+    print("→ pip install -e . (dependencias)")
+    # ojo: el extra [wakeword] re-resolvería tflite-runtime, sin wheels para
+    # py3.14; las deps ya instaladas en el venv sobreviven al reinstalar el base.
+    pip = subprocess.run([sys.executable, "-m", "pip", "install", "-q", "-e", "."],
+                         cwd=repo, timeout=600)
+    if pip.returncode != 0:
+        print("❌ pip falló; el daemon NO se reinicia (sigue con la versión anterior)")
+        sys.exit(1)
+
+    print("→ tests")
+    tests = subprocess.run([sys.executable, "-m", "pytest", "tests", "-q"], cwd=repo, timeout=300)
+    if tests.returncode != 0:
+        print("❌ tests fallaron tras la actualización: NO reinicio el daemon. Revisa el código nuevo.")
+        sys.exit(1)
+
+    if subprocess.run(["systemctl", "--user", "is-active", "--quiet", "local-stt"]).returncode == 0:
+        subprocess.run(["systemctl", "--user", "restart", "local-stt"], timeout=60)
+        print("→ daemon reiniciado con el código nuevo")
+    print("✅ Actualizado. Verifica con: local-stt doctor")
+
+
+def _importable(module: str) -> bool:
+    try:
+        __import__(module)
+        return True
+    except ImportError:
+        return False
+
+
+def cmd_uninstall(args):
+    """Desinstala: servicio, atajos (KDE/GNOME) y opcionalmente datos (--purge)."""
+    if not args.yes:
+        print("Esto detiene el daemon y borra el servicio y los atajos. Usa --yes para confirmar.")
+        sys.exit(1)
+
+    print("→ deteniendo servicio")
+    subprocess.run(["systemctl", "--user", "disable", "--now", "local-stt"], capture_output=True, timeout=30)
+    unit = Path.home() / ".config" / "systemd" / "user" / "local-stt.service"
+    if unit.exists():
+        unit.unlink()
+        subprocess.run(["systemctl", "--user", "daemon-reload"], timeout=15)
+
+    print("→ quitando atajos")
+    if shutil.which("kwriteconfig6"):
+        subprocess.run(["kwriteconfig6", "--file", "khotkeysrc", "--group", "Data", "--key", "DataCount", "0"],
+                       timeout=15)
+    if shutil.which("gsettings"):
+        existing = subprocess.run(
+            ["gsettings", "get", "org.gnome.settings-daemon.plugins.media-keys", "custom-keybindings"],
+            capture_output=True, text=True, timeout=15).stdout.strip()
+        subprocess.run(["gsettings", "set", "org.gnome.settings-daemon.plugins.media-keys",
+                        "custom-keybindings", _strip_gnome_bindings(existing)], timeout=15)
+    for p in ("/tmp/local-stt.sock", "/tmp/local-stt.pid"):
+        Path(p).unlink(missing_ok=True)
+
+    if args.purge:
+        print("→ borrando datos y venv (--purge)")
+        for d in (Path.home() / ".config" / "local-stt",
+                  Path.home() / ".local" / "share" / "local-stt",
+                  Path.home() / ".local" / "state" / "local-stt",
+                  Path(__file__).resolve().parents[2] / ".venv"):
+            if d.exists():
+                shutil.rmtree(d)
+    print("✅ Desinstalado." + ("" if args.purge else " Usa --purge además para borrar config/historial/.venv."))
+
+
 def cmd_config(args):
     """TUI interactivo para ~/.config/local-stt/config.toml (sin TTY: solo muestra)."""
     from .config_tui import run_tui
@@ -522,6 +612,11 @@ def cmd_transcribe_file(args):
 
 
 def main():
+    try:  # salida en orden en pipes/redirecciones (CLI interactivo)
+        sys.stdout.reconfigure(line_buffering=True)
+        sys.stderr.reconfigure(line_buffering=True)
+    except Exception:
+        pass
     p = argparse.ArgumentParser(prog="local-stt", description="Dictado local RTX 5070: Win+F -> copiar -> Ctrl+V")
     p.add_argument("--model", default=None, help="Modelo faster-whisper (default: large-v3-turbo)")
     p.add_argument("--lang", default="es", help="Idioma: es, en, auto (default: es)")
@@ -584,6 +679,14 @@ def main():
 
     st = sub.add_parser("setup", help="Puesta en marcha total: deps, modelo, atajos, servicio, doctor")
     st.set_defaults(func=cmd_setup)
+
+    up = sub.add_parser("update", help="git pull + pip install + tests + restart del daemon")
+    up.set_defaults(func=cmd_update)
+
+    un = sub.add_parser("uninstall", help="Quita servicio y atajos (--purge borra también datos)")
+    un.add_argument("--yes", action="store_true", help="Confirmar sin prompt")
+    un.add_argument("--purge", action="store_true", help="Borrar config, historial y .venv")
+    un.set_defaults(func=cmd_uninstall)
 
     f = sub.add_parser("transcribe", help="Transcribe un archivo de audio")
     f.add_argument("file", help="Ruta a wav/mp3/flac")
