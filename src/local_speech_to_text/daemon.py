@@ -683,8 +683,9 @@ class Daemon:
         self._start_hold_listener()
 
         modo = f"mantén {self.config.hold_key}" if self.config.push_to_talk else "presiona Win+F"
-        notify("Local STT", f"Daemon listo. {modo.capitalize()} para dictar ({self.config.model} en {self.config.device})")
-        print(f"[daemon] Listo. Modelo {self.config.model} en {self.config.device}. {modo.capitalize()} (o: local-stt toggle)")
+        titulo = modo[0].upper() + modo[1:]  # capitalize() destrozaría "Win+F"
+        notify("Local STT", f"Daemon listo. {titulo} para dictar ({self.config.model} en {self.config.device})")
+        print(f"[daemon] Listo. Modelo {self.config.model} en {self.config.device}. {titulo} (o: local-stt toggle)")
         print(f"[daemon] Socket: {self._sock_path} | PID: {os.getpid()}")
         try:
             while self._running:
