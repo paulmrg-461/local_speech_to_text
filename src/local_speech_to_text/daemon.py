@@ -283,6 +283,8 @@ class Daemon:
         if proc is not self._osd_proc or proc.poll() in (None, 0):
             return
         print("[daemon] OSD GTK falló al arrancar; usando Tk")
+        # Recordar el fallback: no reintentar GTK en cada dictado.
+        self._osd_choice = ("tk", "fallback tras fallo de GTK")
         try:
             self._osd_proc = subprocess.Popen(
                 [sys.executable, "-m", "local_speech_to_text.osd", str(self._sock_path)],

@@ -142,6 +142,7 @@ def test_watch_hace_fallback_a_tk(monkeypatch):
     assert len(launched) == 1
     assert launched[0][1:3] == ["-m", "local_speech_to_text.osd"]
     assert d._osd_backend_used == "tk"
+    assert d._osd_choice is not None and d._osd_choice[0] == "tk"  # no reintenta GTK
 
 
 def test_watch_no_interfiere_si_el_osd_ya_se_paro(monkeypatch):

@@ -58,7 +58,9 @@ def setup_env(monkeypatch, tmp_path):
         return _Result()
 
     monkeypatch.setattr(cli.subprocess, "run", fake_run)
-    return cfg, calls
+    reloads: list[str] = []
+    monkeypatch.setattr(cli, "send_command", lambda cmd, path: reloads.append(cmd) or "ok recargado")
+    return cfg, calls, reloads
 
 
 def _hotkey_env(calls):
@@ -69,14 +71,15 @@ def _hotkey_env(calls):
 def test_setup_desregistra_win_f_si_hold_listo(monkeypatch, setup_env):
     monkeypatch.setattr(cli, "_hold_ready", lambda cfg: (True, "AT keyboard"))
     cli.cmd_setup(Args())
-    calls = setup_env[1]
+    cfg, calls, reloads = setup_env
     assert _hotkey_env(calls)["LOCAL_STT_SKIP_TOGGLE"] == "1"
+    assert reloads == ["reload"]  # aplica la config sin recargar el modelo
 
 
 def test_setup_mantiene_win_f_si_hold_no_listo(monkeypatch, setup_env, capsys):
     monkeypatch.setattr(cli, "_hold_ready", lambda cfg: (False, "usuario fuera del grupo input"))
     cli.cmd_setup(Args())
-    calls = setup_env[1]
+    cfg, calls, _ = setup_env
     assert "LOCAL_STT_SKIP_TOGGLE" not in _hotkey_env(calls)
     out = capsys.readouterr().out
     assert "push_to_talk activo pero no disponible" in out
@@ -84,7 +87,7 @@ def test_setup_mantiene_win_f_si_hold_no_listo(monkeypatch, setup_env, capsys):
 
 
 def test_setup_sin_hold_no_toca_win_f(monkeypatch, setup_env):
-    cfg, calls = setup_env
+    cfg, calls, _ = setup_env
     object.__setattr__(cfg, "push_to_talk", False)
     cli.cmd_setup(Args())
     assert "LOCAL_STT_SKIP_TOGGLE" not in _hotkey_env(calls)

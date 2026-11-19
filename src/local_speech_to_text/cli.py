@@ -538,6 +538,10 @@ def cmd_setup(args):
                 break
             time.sleep(0.5)
         print("   ✅ daemon activo" if cfg.socket_path.exists() else "   ⚠️  arrancando lento: revisa 'local-stt doctor'")
+        if cfg.socket_path.exists():
+            # Aplica push-to-talk/OSD/idioma sin reiniciar (no recarga el modelo).
+            resp = send_command("reload", cfg.socket_path)
+            print(f"   ✅ config aplicada: {resp}")
     else:
         print("   ⚠️  sin unit systemd; corre 'local-stt daemon' manualmente")
 
