@@ -1,3 +1,5 @@
+import pytest
+
 from local_speech_to_text.bench import bench_model, render_table
 
 
@@ -35,6 +37,11 @@ def test_render_trunca_preview():
 def test_bench_model_e2e_cuda():
     """Smoke test real: tiny en CUDA con 1s de ruido (rápido y ya cacheado)."""
     import numpy as np
+
+    pytest.importorskip("faster_whisper", reason="CI slim: sin faster-whisper")
+    ctranslate2 = pytest.importorskip("ctranslate2")
+    if ctranslate2.get_cuda_device_count() == 0:
+        pytest.skip("sin GPU CUDA")
 
     row = bench_model("tiny", np.zeros((16000,), dtype=np.float32), 16000,
                       device="cuda", compute="float16", language="es")

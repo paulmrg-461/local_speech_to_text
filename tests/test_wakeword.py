@@ -1,9 +1,12 @@
 from pathlib import Path
 
+import pytest
+
 from local_speech_to_text.wakeword import WakeWordMonitor, resolve_model_path
 
 
 def test_resolve_model_path_nombre_a_archivo():
+    pytest.importorskip("openwakeword", reason="CI slim: sin wake word")
     p = resolve_model_path("hey_jarvis")
     assert p.endswith(".onnx")
     assert Path(p).exists()

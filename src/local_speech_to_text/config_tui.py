@@ -40,7 +40,9 @@ _MENU = [
     ("hold_min_ms", "Tap mínimo para hold (ms)", "int", None),
 ]
 
-_ORDER = [k for k, *_ in _MENU] + ["stream_window", "partial_interval", "wake_word_threshold", "sample_rate"]
+_ORDER = [k for k, *_ in _MENU] + [
+    "stream_window", "partial_interval", "wake_word_threshold", "sample_rate", "hold_devices",
+]
 _BOOL_KEYS = {k for k, _, t, _ in _MENU if t == "bool"}
 
 
@@ -65,6 +67,9 @@ def _render(cfg: dict) -> str:
             lines.append(f"{key} = {val}")
         elif isinstance(val, str):
             lines.append(f'{key} = "{val}"')
+        elif isinstance(val, (list, tuple)):
+            items = ", ".join(f'"{item}"' for item in val)
+            lines.append(f"{key} = [{items}]")
     # conservar tablas desconocidas (app_vocab etc.) de forma simple
     for key, val in cfg.items():
         if key in _ORDER:

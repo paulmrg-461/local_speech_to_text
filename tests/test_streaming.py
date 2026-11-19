@@ -1,4 +1,5 @@
 import numpy as np
+import pytest
 
 from local_speech_to_text.config import Config
 from local_speech_to_text.daemon import Daemon
@@ -79,6 +80,7 @@ def test_cola_muy_corta_se_omite():
 
 
 def test_recorder_full_audio_thread_safe():
+    pytest.importorskip("sounddevice", reason="CI slim: sin backend de audio")
     r = AudioRecorder()
     with r._buf_lock:
         r._buffers = [np.ones((16000,), dtype=np.float32), np.zeros((16000,), dtype=np.float32)]

@@ -3,6 +3,7 @@ import socket
 import threading
 
 import numpy as np
+import pytest
 
 from local_speech_to_text.config import Config
 from local_speech_to_text.daemon import Daemon
@@ -10,11 +11,13 @@ from local_speech_to_text.recorder import AudioRecorder
 
 
 def test_snapshot_vacio_si_no_graba():
+    pytest.importorskip("sounddevice", reason="CI slim: sin backend de audio")
     r = AudioRecorder()
     assert r.snapshot().size == 0
 
 
 def test_snapshot_devuelve_ultimo_audio(tmp_path):
+    pytest.importorskip("sounddevice", reason="CI slim: sin backend de audio")
     r = AudioRecorder()
     chunk = np.ones((16000,), dtype=np.float32)  # 1s
     with r._buf_lock:
@@ -24,6 +27,7 @@ def test_snapshot_devuelve_ultimo_audio(tmp_path):
 
 
 def test_level_payload_estructura():
+    pytest.importorskip("sounddevice", reason="CI slim: sin backend de audio")
     d = Daemon(Config.load())
     payload = json.loads(d._level_payload())
     assert {"recording", "elapsed", "rms", "partial"} <= set(payload)

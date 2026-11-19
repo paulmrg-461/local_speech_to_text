@@ -113,12 +113,15 @@ def _serve_and_stat(d: Daemon) -> int:
     try:
         mode = 0
         for _ in range(150):  # el hilo puede tardar en borrar el socket viejo
-            if d._sock_path.exists():
+            try:
                 st = d._sock_path.stat()
-                if stat.S_ISSOCK(st.st_mode):
-                    mode = stat.S_IMODE(st.st_mode)
-                    if mode == 0o600:
-                        break
+            except FileNotFoundError:  # _serve lo borró entre exists() y stat()
+                time.sleep(0.02)
+                continue
+            if stat.S_ISSOCK(st.st_mode):
+                mode = stat.S_IMODE(st.st_mode)
+                if mode == 0o600:
+                    break
             time.sleep(0.02)
         return mode
     finally:

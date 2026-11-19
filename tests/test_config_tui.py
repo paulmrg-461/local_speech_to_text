@@ -28,6 +28,14 @@ def test_render_conserva_tablas_desconocidas():
     assert '"code|vscode" = "vocab-ide.txt"' in out
 
 
+def test_render_conserva_hold_devices():
+    """El TUI no edita la allowlist pero no debe comentarla al guardar."""
+    out = _render({"push_to_talk": True, "hold_devices": ["AT Translated", "Logitech"]})
+    assert 'hold_devices = ["AT Translated", "Logitech"]' in out
+    assert "# (sin soporte TUI) hold_devices" not in out
+    assert "hold_devices = []" in _render({"hold_devices": []})
+
+
 def test_run_tui_sin_tty_solo_muestra(monkeypatch, tmp_path, capsys):
     monkeypatch.setattr("sys.stdin", io.StringIO(""))  # isatty False en StringIO
     cfg_file = tmp_path / "config.toml"

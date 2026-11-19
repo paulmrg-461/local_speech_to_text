@@ -183,6 +183,7 @@ def _daemon_stub(monkeypatch, reason=None):
     d._recording_origin = None
     d.hold_listener = None
     d.hold_status = "off"
+    d.wake_monitor = None
     d.config = replace(
         Config.load(config_file=Path("/no/existe.toml")),
         push_to_talk=True,
@@ -261,3 +262,22 @@ def test_grabacion_externa_no_la_para_el_release(monkeypatch):
 
 def test_chord_parseado_una_sola_vez():
     assert isinstance(parse_chord("super+f"), HoldChord)
+
+
+def test_reload_reinicia_listener_al_cambiar_hold(monkeypatch):
+    from local_speech_to_text import daemon as daemon_mod
+
+    d, _ = _daemon_stub(monkeypatch)
+    d._start_hold_listener()
+    old_listener = d.hold_listener
+    assert old_listener is not None
+
+    new_cfg = replace(d.config, hold_min_ms=350)
+    monkeypatch.setattr(daemon_mod.Config, "load", classmethod(lambda cls, **kw: new_cfg))
+
+    out = d.reload_config()
+
+    assert out.startswith("ok recargado")
+    assert d.hold_listener is not None
+    assert d.hold_listener is not old_listener  # reiniciado con la config nueva
+    assert d.hold_listener.machine.min_ms == 350
