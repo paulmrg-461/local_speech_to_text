@@ -92,18 +92,19 @@ def test_osd_preview_gtk_usa_el_script(monkeypatch):
     monkeypatch.setattr(osd_backend, "select_backend", lambda forced="auto", **kw: ("gtk", "wayland"))
     monkeypatch.setattr(osd_backend, "find_system_python", lambda: "/usr/bin/python3")
     monkeypatch.setattr(osd_backend, "gtk_layer_available", lambda **kw: True)
+    monkeypatch.setattr(osd_backend, "probe_env", lambda: {"LD_PRELOAD": "libls.so"})
     launched = {}
-    monkeypatch.setattr(cli.subprocess, "run", lambda argv, **kw: launched.setdefault("argv", argv))
+    monkeypatch.setattr(cli.subprocess, "run", lambda argv, **kw: launched.update(argv=argv, kw=kw))
     args = Args()
     args.preview = True
     args.seconds = 2.0
 
     cli.cmd_osd(args)
 
-    argv = launched["argv"]
-    assert argv[0] == "/usr/bin/python3"
-    assert argv[1].endswith("osd_gtk.py")
-    assert "--preview" in argv
+    assert launched["argv"][0] == "/usr/bin/python3"
+    assert launched["argv"][1].endswith("osd_gtk.py")
+    assert "--preview" in launched["argv"]
+    assert launched["kw"]["env"]["LD_PRELOAD"] == "libls.so"
 
 
 def test_osd_preview_gtk_sin_deps_no_lanza(monkeypatch, capsys):

@@ -99,6 +99,7 @@ def test_launch_gtk_arranca_vigilante(monkeypatch):
     d = _daemon(monkeypatch)
     monkeypatch.setattr(osd_backend, "select_backend", lambda forced="auto", **kw: ("gtk", "wayland"))
     monkeypatch.setattr(osd_backend, "find_system_python", lambda: "/usr/bin/python3")
+    monkeypatch.setattr(osd_backend, "probe_env", lambda: {"LD_PRELOAD": "libls.so"})
 
     started = {}
 
@@ -113,13 +114,20 @@ def test_launch_gtk_arranca_vigilante(monkeypatch):
     import local_speech_to_text.daemon as dm
 
     monkeypatch.setattr(dm.threading, "Thread", DummyThread)
-    monkeypatch.setattr(dm.subprocess, "Popen", lambda argv, **kw: FakeProc())
+    popen_kwargs = {}
+
+    def fake_popen(argv, **kw):
+        popen_kwargs.update(kw)
+        return FakeProc()
+
+    monkeypatch.setattr(dm.subprocess, "Popen", fake_popen)
 
     d._launch_osd()
 
     assert d._osd_backend_used == "gtk"
     assert started["started"] is True
     assert started["target"] == d._watch_osd
+    assert popen_kwargs["env"]["LD_PRELOAD"] == "libls.so"
 
 
 def test_watch_hace_fallback_a_tk(monkeypatch):

@@ -6,6 +6,7 @@ aquí es stdlib: se puede importar y testear sin GTK ni Tk.
 
 from __future__ import annotations
 
+import ctypes.util
 import json
 import math
 import os
@@ -15,12 +16,48 @@ import subprocess
 from pathlib import Path
 
 # Sondeo de layer-shell con el python del sistema (el venv no ve PyGObject).
+# `is_supported()` es False si el compositor no expone wlr-layer-shell o si
+# gtk4-layer-shell se cargó después de libwayland (el caso de Arch sin preload).
 GTK_PROBE = (
     "import gi;"
     "gi.require_version('Gtk','4.0');"
+    "gi.require_version('Gdk','4.0');"
     "gi.require_version('Gtk4LayerShell','1.0');"
-    "from gi.repository import Gtk, Gtk4LayerShell"
+    "from gi.repository import Gtk, Gtk4LayerShell;"
+    "Gtk.init();"
+    "raise SystemExit(0 if Gtk4LayerShell.is_supported() else 1)"
 )
+
+_PRELOAD_PATHS = (
+    "/usr/lib/libgtk4-layer-shell.so.0",
+    "/usr/lib/libgtk4-layer-shell.so",
+)
+
+
+def layer_shell_preload() -> str | None:
+    """Biblioteca a precargar para que layer-shell inicialice.
+
+    En Arch, PyGObject enlaza libwayland antes que gtk4-layer-shell y la capa
+    falla con "Failed to initialize layer surface". `LD_PRELOAD` con el soname
+    resuelve el orden de símbolos sin recompilar.
+    """
+    soname = ctypes.util.find_library("gtk4-layer-shell")
+    if soname:
+        return soname
+    for path in _PRELOAD_PATHS:
+        if Path(path).exists():
+            return path
+    return None
+
+
+def probe_env(base: dict | None = None) -> dict:
+    """Entorno para el OSD/probe GTK con LD_PRELOAD ya aplicado."""
+    env = dict(os.environ if base is None else base)
+    preload = layer_shell_preload()
+    if preload:
+        current = env.get("LD_PRELOAD")
+        env["LD_PRELOAD"] = f"{preload}:{current}" if current else preload
+    return env
 
 
 def query_level(sock_path: str, timeout: float = 0.5) -> dict | None:
@@ -89,7 +126,7 @@ def gtk_layer_available(
             [py, "-c", GTK_PROBE],
             capture_output=True,
             timeout=timeout,
-            env=env if env is not None else os.environ.copy(),
+            env=probe_env(env),
         )
         return proc.returncode == 0
     except Exception:

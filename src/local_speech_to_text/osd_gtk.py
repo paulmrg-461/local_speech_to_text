@@ -55,6 +55,7 @@ def check() -> bool:
         import gi
 
         gi.require_version("Gtk", "4.0")
+        gi.require_version("Gdk", "4.0")
         gi.require_version("Gtk4LayerShell", "1.0")
         from gi.repository import Gtk, Gtk4LayerShell  # noqa: F401
 
@@ -91,8 +92,16 @@ def run(sock: str, margin: int = DEFAULT_MARGIN, preview: float | None = None) -
     import gi
 
     gi.require_version("Gtk", "4.0")
+    gi.require_version("Gdk", "4.0")
     gi.require_version("Gtk4LayerShell", "1.0")
     from gi.repository import Gdk, GLib, Gtk, Gtk4LayerShell, Pango
+
+    Gtk.init()
+    if not Gtk4LayerShell.is_supported():
+        raise RuntimeError(
+            "layer-shell no soportado: compositor sin wlr-layer-shell o falta LD_PRELOAD "
+            "(el daemon lo añade solo; ejecuta vía 'local-stt osd --preview')"
+        )
 
     app = Gtk.Application(application_id="io.github.paulmrg461.LocalSttOsd")
     started = time.monotonic()

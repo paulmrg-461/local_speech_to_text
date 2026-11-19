@@ -264,10 +264,15 @@ class Daemon:
         if not getattr(self.config, "overlay", True):
             return
         argv, backend = self._osd_argv()
+        env = None
+        if backend == "gtk":
+            from .osd_backend import probe_env
+
+            env = probe_env()
         try:
             self._osd_proc = subprocess.Popen(
                 argv, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                start_new_session=True,
+                start_new_session=True, env=env,
             )
         except Exception as e:
             print(f"[daemon] OSD no lanzado: {e}")

@@ -279,6 +279,8 @@ Backend selection (`osd_backend = "auto" | "gtk" | "tk"`, `osd_margin_top = 80`)
 
 The GTK backend runs as a standalone script with the **system** Python (the venv does not see PyGObject), uses the `overlay` layer anchored top-center with `keyboard_mode = none` (it never steals focus) and falls back to Tk automatically if it cannot start. `local-stt doctor` prints the chosen backend and the reason.
 
+On Arch, `gtk4-layer-shell` must load **before** `libwayland` or the layer is never initialized (`Failed to initialize layer surface`). `local-stt` prepends `LD_PRELOAD=libgtk4-layer-shell.so.0` for the OSD process and the availability probe checks `Gtk4LayerShell.is_supported()`, so this is transparent — no wrapper script needed.
+
 ```bash
 sudo pacman -S --needed gtk4 python-gobject gtk4-layer-shell   # native OSD
 local-stt osd --check                                          # 0 = backend can start

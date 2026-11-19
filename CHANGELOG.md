@@ -15,6 +15,12 @@ El proyecto sigue [SemVer](https://semver.org/lang/es/) de forma pragmática:
   muestra el OSD N segundos con datos sintéticos (verificación visual sin
   dictar).
 
+### Corregido
+- OSD GTK: en Arch `gtk4-layer-shell` se enlaza después de `libwayland` y la
+  capa no inicializaba. El daemon/preview añaden `LD_PRELOAD` automáticamente y
+  el sondeo exige `Gtk4LayerShell.is_supported()`, así que no se elige GTK
+  cuando la capa no puede funcionar.
+
 ## [0.2.0] - 2026-11-19
 
 ### Añadido

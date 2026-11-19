@@ -122,6 +122,30 @@ def test_describe():
     assert ob.describe("tk", "x11").startswith("tk ·")
 
 
+def test_layer_shell_preload_soname(monkeypatch):
+    monkeypatch.setattr(ob.ctypes.util, "find_library", lambda name: "libgtk4-layer-shell.so.0")
+    assert ob.layer_shell_preload() == "libgtk4-layer-shell.so.0"
+
+
+def test_layer_shell_preload_sin_biblioteca(monkeypatch, tmp_path):
+    monkeypatch.setattr(ob.ctypes.util, "find_library", lambda name: None)
+    monkeypatch.setattr(ob, "_PRELOAD_PATHS", (str(tmp_path / "no-existe.so"),))
+    assert ob.layer_shell_preload() is None
+
+
+def test_probe_env_prepend(monkeypatch):
+    monkeypatch.setattr(ob, "layer_shell_preload", lambda: "libls.so")
+    env = ob.probe_env({"LD_PRELOAD": "otra.so", "X": "1"})
+    assert env["LD_PRELOAD"] == "libls.so:otra.so"
+    assert env["X"] == "1"
+    assert ob.probe_env({})["LD_PRELOAD"] == "libls.so"
+
+
+def test_probe_env_sin_preload(monkeypatch):
+    monkeypatch.setattr(ob, "layer_shell_preload", lambda: None)
+    assert ob.probe_env({"A": "1"}) == {"A": "1"}
+
+
 def test_query_level_contra_socket(tmp_path):
     sock = tmp_path / "osd.sock"
     srv = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)

@@ -114,7 +114,13 @@ def cmd_status(args):
 
 def cmd_osd(args):
     """Estado del OSD: backend elegido, disponibilidad y cómo habilitarlo."""
-    from .osd_backend import describe, find_system_python, gtk_layer_available, select_backend
+    from .osd_backend import (
+        describe,
+        find_system_python,
+        gtk_layer_available,
+        probe_env,
+        select_backend,
+    )
 
     cfg = _config_from_args(args)
     backend, reason = select_backend(cfg.osd_backend)
@@ -144,7 +150,7 @@ def cmd_osd(args):
                 "--preview", "--seconds", str(seconds),
             ]
         print(f"Vista previa del OSD ({backend}, {seconds:g}s)...")
-        subprocess.run(argv, timeout=seconds + 5)
+        subprocess.run(argv, timeout=seconds + 5, env=probe_env() if backend == "gtk" else None)
         return
     if getattr(args, "check", False):
         sys.exit(0 if available else 1)
