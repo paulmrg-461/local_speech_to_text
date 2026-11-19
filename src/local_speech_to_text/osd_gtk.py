@@ -13,6 +13,7 @@ Diseño: docs/specs/osd-wayland/design.md
 
 from __future__ import annotations
 
+import os
 import signal
 import sys
 import time
@@ -24,9 +25,17 @@ try:  # importado como paquete (tests) o como script (daemon)
         preview_info,
         query_level,
         should_exit,
+        title_text,
     )
 except ImportError:  # pragma: no cover - ejecución por ruta
-    from osd_backend import bar_fraction, format_status, preview_info, query_level, should_exit
+    from osd_backend import (
+        bar_fraction,
+        format_status,
+        preview_info,
+        query_level,
+        should_exit,
+        title_text,
+    )
 
 DEFAULT_SOCK = "/tmp/local-stt.sock"
 DEFAULT_MARGIN = 80
@@ -131,7 +140,7 @@ def run(sock: str, margin: int = DEFAULT_MARGIN, preview: float | None = None) -
         card.add_css_class("osd")
         card.set_size_request(WIDTH, -1)
 
-        title = Gtk.Label(label="🎤 ESCUCHANDO  ·  Win+F para terminar")
+        title = Gtk.Label(label=title_text(os.environ.get("LOCAL_STT_HOLD") == "1"))
         title.add_css_class("osd-title")
         bar = Gtk.ProgressBar()
         bar.set_show_text(False)

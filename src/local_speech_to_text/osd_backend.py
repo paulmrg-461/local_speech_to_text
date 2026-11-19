@@ -93,6 +93,13 @@ def should_exit(info: dict | None) -> bool:
     return info is None or not info.get("recording")
 
 
+def title_text(hold: bool) -> str:
+    """Instrucción del OSD según el modo (mantener vs pulsar)."""
+    if hold:
+        return "🎤 ESCUCHANDO  ·  suelta la tecla para terminar"
+    return "🎤 ESCUCHANDO  ·  Win+F para terminar"
+
+
 def preview_info(elapsed: float) -> dict:
     """Datos sintéticos para `--preview`: mismo contrato que el socket."""
     rms = 0.06 + 0.05 * abs(math.sin(elapsed * 2.0))

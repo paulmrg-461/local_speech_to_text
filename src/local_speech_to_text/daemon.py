@@ -220,8 +220,12 @@ class Daemon:
         play_sound("start")
         self._launch_osd()
         self._start_partial_worker()
-        notify("🎤 Escuchando...", "Habla ahora. Presiona Win+F de nuevo para terminar.", icon="audio-input-microphone")
-        print("[daemon] 🎤 Grabando... Win+F para parar")
+        if self.config.push_to_talk:
+            hint = "Habla mientras mantienes la tecla; suéltala para transcribir."
+        else:
+            hint = "Habla ahora. Presiona Win+F de nuevo para terminar."
+        notify("🎤 Escuchando...", hint, icon="audio-input-microphone")
+        print(f"[daemon] 🎤 Grabando... {'suelta la tecla' if self.config.push_to_talk else 'Win+F para parar'}")
 
         def _watchdog():
             while self.recorder.is_recording:
@@ -259,20 +263,26 @@ class Daemon:
             print("[daemon] sin python del sistema con GTK: OSD en Tk")
         return [sys.executable, "-m", "local_speech_to_text.osd", sock], "tk"
 
+    def _osd_env(self, backend: str) -> dict:
+        """Entorno del OSD: LD_PRELOAD para GTK y modo hold para el título."""
+        env = dict(os.environ)
+        if backend == "gtk":
+            from .osd_backend import probe_env
+
+            env = probe_env(env)
+        if self.config.push_to_talk:
+            env["LOCAL_STT_HOLD"] = "1"
+        return env
+
     def _launch_osd(self) -> None:
         """OSD con nivel de voz (opcional, config overlay)."""
         if not getattr(self.config, "overlay", True):
             return
         argv, backend = self._osd_argv()
-        env = None
-        if backend == "gtk":
-            from .osd_backend import probe_env
-
-            env = probe_env()
         try:
             self._osd_proc = subprocess.Popen(
                 argv, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                start_new_session=True, env=env,
+                start_new_session=True, env=self._osd_env(backend),
             )
         except Exception as e:
             print(f"[daemon] OSD no lanzado: {e}")
@@ -294,7 +304,7 @@ class Daemon:
             self._osd_proc = subprocess.Popen(
                 [sys.executable, "-m", "local_speech_to_text.osd", str(self._sock_path)],
                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                start_new_session=True,
+                start_new_session=True, env=self._osd_env("tk"),
             )
             self._osd_backend_used = "tk"
         except Exception as e:

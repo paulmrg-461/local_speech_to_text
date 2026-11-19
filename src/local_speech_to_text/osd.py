@@ -7,6 +7,7 @@ consultando el socket (`level`) ~10 veces/seg.
 
 from __future__ import annotations
 
+import os
 import sys
 import time
 
@@ -16,6 +17,7 @@ from .osd_backend import (
     preview_info,
     query_level,
     should_exit,
+    title_text,
 )
 
 __all__ = ["Overlay", "parse_argv", "query_level", "main"]
@@ -66,7 +68,7 @@ class Overlay:
         self.root.geometry(f"{self.W}x{self.H}+{x}+80")
         self.root.configure(bg="#1a1a2e")
 
-        tk.Label(self.root, text="🎤 ESCUCHANDO  ·  Win+F para terminar", fg="#e0e0e0",
+        tk.Label(self.root, text=title_text(os.environ.get("LOCAL_STT_HOLD") == "1"), fg="#e0e0e0",
                  bg="#1a1a2e", font=("Sans", 10, "bold")).pack(pady=(6, 0))
         bar_bg = tk.Canvas(self.root, width=self.W - 40, height=12, bg="#2a2a4a",
                            highlightthickness=0)

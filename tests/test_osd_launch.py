@@ -99,7 +99,7 @@ def test_launch_gtk_arranca_vigilante(monkeypatch):
     d = _daemon(monkeypatch)
     monkeypatch.setattr(osd_backend, "select_backend", lambda forced="auto", **kw: ("gtk", "wayland"))
     monkeypatch.setattr(osd_backend, "find_system_python", lambda: "/usr/bin/python3")
-    monkeypatch.setattr(osd_backend, "probe_env", lambda: {"LD_PRELOAD": "libls.so"})
+    monkeypatch.setattr(osd_backend, "probe_env", lambda base=None: {"LD_PRELOAD": "libls.so"})
 
     started = {}
 
@@ -186,6 +186,17 @@ def test_kill_osd_mata_si_no_muere(monkeypatch):
     assert proc.terminated is True
     assert proc.killed is True
     assert d._osd_proc is None
+
+
+def test_osd_env_marca_hold(monkeypatch):
+    d = _daemon(monkeypatch)
+    object.__setattr__(d.config, "push_to_talk", True)
+    assert d._osd_env("tk")["LOCAL_STT_HOLD"] == "1"
+
+
+def test_osd_env_sin_hold(monkeypatch):
+    d = _daemon(monkeypatch)
+    assert "LOCAL_STT_HOLD" not in d._osd_env("tk")
 
 
 def test_config_osd_defaults_y_env(monkeypatch, tmp_path):

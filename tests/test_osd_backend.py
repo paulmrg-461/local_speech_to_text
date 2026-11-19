@@ -52,6 +52,11 @@ def test_preview_info_contrato():
     assert ob.should_exit(info) is False
 
 
+def test_title_text_segun_modo():
+    assert "Win+F" in ob.title_text(False)
+    assert "suelta la tecla" in ob.title_text(True)
+
+
 def test_tk_parse_argv():
     from local_speech_to_text.osd import parse_argv
 

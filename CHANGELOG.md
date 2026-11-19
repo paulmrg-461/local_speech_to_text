@@ -10,7 +10,8 @@ El proyecto sigue [SemVer](https://semver.org/lang/es/) de forma pragmática:
 - **OSD nativo Wayland**: backend GTK4 + `gtk4-layer-shell` (capa overlay, sin
   robar foco) lanzado con el python del sistema; fallback automático a Tk en
   GNOME/X11. `osd_backend = auto|gtk|tk`, `osd_margin_top`, sondeo cacheado y
-  `doctor` informa del backend elegido.
+  `doctor` informa del backend elegido. El título del OSD y la notificación
+  cambian según el modo (mantener tecla vs pulsar Win+F).
 - `local-stt osd`: backend elegido, dependencias y `--check`; `--preview`
   muestra el OSD N segundos con datos sintéticos (verificación visual sin
   dictar).
