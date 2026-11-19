@@ -33,6 +33,9 @@ optdepends=(
   'python-openwakeword: manos libres con wake word "hey jarvis" (AUR)'
   'python-onnxruntime-cpu: motor del wake word'
   'python-evdev: push-to-talk (mantener tecla para dictar)'
+  'gtk4: OSD nativo Wayland'
+  'python-gobject: OSD nativo Wayland'
+  'gtk4-layer-shell: OSD nativo Wayland (capa overlay)'
   'cuda: runtime CUDA para faster-whisper'
   'nvidia-utils: driver NVIDIA'
 )

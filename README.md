@@ -15,7 +15,7 @@
 | 📋 Clipboard + auto-paste | Result is copied and `Ctrl+V` is injected automatically (or paste manually) |
 | 🗣️ Spoken punctuation | Say *"punto y coma"*, *"nueva línea"*, *"abrir paréntesis"*… get `;`, a line break, `(` |
 | 📖 Custom vocabulary & corrections | Teach Whisper your names/jargon (`initial_prompt`) and fix recurring mistakes post-hoc |
-| 🖥️ Live OSD | Floating indicator with a real-time voice-level bar **and partial transcription while you speak** |
+| 🖥️ Live OSD | Floating indicator with a real-time voice-level bar **and partial transcription while you speak**. Native Wayland layer-shell on KDE/wlroots; Tk/XWayland fallback elsewhere |
 | 🕘 History | Last 100 dictations saved locally (`local-stt history`, wofi/rofi picker, re-copy any entry) |
 | 🔥 Hot reload | Change model/language/vocabulary without restarting the daemon (`local-stt reload`) |
 | 🤚 Wake word (optional) | Say **"hey jarvis"** and dictation starts — no keyboard at all (CPU, openWakeWord) |
@@ -269,6 +269,19 @@ overlay = false         # no OSD at all
 partial_results = false  # OSD without live text
 ```
 
+Backend selection (`osd_backend = "auto" | "gtk" | "tk"`, `osd_margin_top = 80`):
+
+| Backend | When | Requires |
+|---|---|---|
+| `gtk` | Wayland with layer-shell (KDE Plasma, sway/hyprland) | `gtk4`, `python-gobject`, `gtk4-layer-shell` (all in Arch `extra`; the AUR package lists them as optdepends) |
+| `tk` | GNOME, X11, or if the GTK probe fails | `tk` (already installed with Python) |
+
+The GTK backend runs as a standalone script with the **system** Python (the venv does not see PyGObject), uses the `overlay` layer anchored top-center with `keyboard_mode = none` (it never steals focus) and falls back to Tk automatically if it cannot start. `local-stt doctor` prints the chosen backend and the reason.
+
+```bash
+sudo pacman -S --needed gtk4 python-gobject gtk4-layer-shell   # native OSD
+```
+
 ### Contextual vocabulary per app (optional)
 
 Use a different vocabulary depending on which window is focused (e.g. jargon when dictating in your IDE, casual terms in a chat app):
@@ -410,7 +423,7 @@ Not implemented yet — documented so expectations are clear:
 | **AUR / PKGBUILD** | ✅ done | `packaging/aur/` ships a source PKGBUILD (AUR deps for the Python stack, cuBLAS 12 bundled from the PyPI wheel into `/usr/lib/local-stt/cublas`). Uninstall via `pacman -R local-stt`; `local-stt uninstall` stays user-level only. |
 | **Push-to-talk (hold key)** | ✅ done | `push_to_talk = true` + `python-evdev`: hold `Win+F` to record, release to transcribe. Opt-in because it needs read access to `/dev/input` (grupo `input`). See [Push-to-talk](#push-to-talk-hold-to-dictate). |
 | **Custom Spanish wake word** | ❌ | openWakeWord ships English-trained models ("hey jarvis", "alexa"…). A custom "oye computadora" requires training a model (synthetic TTS data + fine-tune). |
-| **Wayland-native OSD** | partial | The floating indicator runs via XWayland (`DISPLAY`). Works, but a native layer-shell client (Qt/GTK) would survive XWayland-less sessions. |
+| **Wayland-native OSD** | ✅ KDE/wlroots, Tk on GNOME | `gtk4` + `python-gobject` + `gtk4-layer-shell`: floating indicator on the `overlay` layer, no XWayland and no focus stealing. GNOME/Mutter has no layer-shell, so it keeps the Tk/XWayland OSD. See [Live OSD](#live-osd-with-voice-level-and-partial-text). |
 | **Exact window detection on KDE** | partial | Requires `kdotool` (AUR). The built-in KWin DBus fallback works but is best-effort and slower (see *Contextual vocabulary*). |
 | **Multi-language output** | ❌ | Whisper's `task=translate` only translates **into English**. Dictating Spanish → English works; the reverse doesn't exist upstream. |
 

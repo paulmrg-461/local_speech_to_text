@@ -37,6 +37,8 @@ class Daemon:
         self._running = False
         self._server_thread: threading.Thread | None = None
         self._osd_proc: subprocess.Popen | None = None
+        self._osd_choice: tuple[str, str] | None = None  # (backend, motivo), cacheado
+        self._osd_backend_used = "tk"
         self._partial_text = ""
         self._partial_thread: threading.Thread | None = None
         self._partial_busy = False
@@ -242,27 +244,68 @@ class Daemon:
 
         threading.Thread(target=_watchdog, daemon=True).start()
 
+    def _osd_argv(self) -> tuple[list[str], str]:
+        """argv del OSD y backend realmente usado (gtk|tk)."""
+        from .osd_backend import find_system_python, select_backend
+
+        backend, reason = self._osd_choice or select_backend(self.config.osd_backend)
+        self._osd_choice = (backend, reason)
+        sock = str(self._sock_path)
+        if backend == "gtk":
+            python = find_system_python()
+            script = Path(__file__).with_name("osd_gtk.py")
+            if python and script.exists():
+                return [python, str(script), sock, "--margin", str(self.config.osd_margin_top)], "gtk"
+            print("[daemon] sin python del sistema con GTK: OSD en Tk")
+        return [sys.executable, "-m", "local_speech_to_text.osd", sock], "tk"
+
     def _launch_osd(self) -> None:
         """OSD con nivel de voz (opcional, config overlay)."""
         if not getattr(self.config, "overlay", True):
             return
+        argv, backend = self._osd_argv()
+        try:
+            self._osd_proc = subprocess.Popen(
+                argv, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                start_new_session=True,
+            )
+        except Exception as e:
+            print(f"[daemon] OSD no lanzado: {e}")
+            self._osd_proc = None
+            return
+        self._osd_backend_used = backend
+        if backend == "gtk":
+            # Si GTK muere al arrancar (typelib roto, sin display), Tk una vez.
+            threading.Thread(target=self._watch_osd, args=(self._osd_proc,), daemon=True).start()
+
+    def _watch_osd(self, proc: subprocess.Popen) -> None:
+        time.sleep(0.6)
+        if proc is not self._osd_proc or proc.poll() in (None, 0):
+            return
+        print("[daemon] OSD GTK falló al arrancar; usando Tk")
         try:
             self._osd_proc = subprocess.Popen(
                 [sys.executable, "-m", "local_speech_to_text.osd", str(self._sock_path)],
                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                 start_new_session=True,
             )
+            self._osd_backend_used = "tk"
         except Exception as e:
-            print(f"[daemon] OSD no lanzado: {e}")
+            print(f"[daemon] OSD Tk tampoco arrancó: {e}")
             self._osd_proc = None
 
     def _kill_osd(self) -> None:
-        if self._osd_proc:
+        if not self._osd_proc:
+            return
+        proc, self._osd_proc = self._osd_proc, None
+        try:
+            proc.terminate()
             try:
-                self._osd_proc.terminate()
-            except Exception:
-                pass
-            self._osd_proc = None
+                proc.wait(timeout=1.0)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+        except Exception:
+            pass
 
     def _start_partial_worker(self) -> None:
         """Parciales en vivo + streaming de ventanas para dictados largos.
@@ -448,6 +491,8 @@ class Daemon:
             self._stop_hold_listener()
             self._start_hold_listener()
             print(f"[daemon] push-to-talk: {self.hold_status}")
+        # OSD: el backend se re-sondea en el próximo dictado
+        self._osd_choice = None
         return f"ok recargado: model={new.model} lang={new.language or 'auto'}"
 
     # --- Socket IPC para toggle desde atajo ---

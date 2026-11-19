@@ -4,6 +4,14 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/).
 El proyecto sigue [SemVer](https://semver.org/lang/es/) de forma pragmática:
 0.x = API de CLI/config todavía puede cambiar.
 
+## [Unreleased]
+
+### Añadido
+- **OSD nativo Wayland**: backend GTK4 + `gtk4-layer-shell` (capa overlay, sin
+  robar foco) lanzado con el python del sistema; fallback automático a Tk en
+  GNOME/X11. `osd_backend = auto|gtk|tk`, `osd_margin_top`, sondeo cacheado y
+  `doctor` informa del backend elegido.
+
 ## [0.2.0] - 2026-11-19
 
 ### Añadido

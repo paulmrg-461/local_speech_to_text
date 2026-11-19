@@ -57,6 +57,9 @@ _ENV_MAP = {
     "hold_key": "LOCAL_STT_HOLD_KEY",
     "hold_min_ms": "LOCAL_STT_HOLD_MIN_MS",
     "hold_devices": "LOCAL_STT_HOLD_DEVICES",
+    # OSD (indicador flotante)
+    "osd_backend": "LOCAL_STT_OSD_BACKEND",
+    "osd_margin_top": "LOCAL_STT_OSD_MARGIN",
 }
 
 _DEFAULTS = {
@@ -89,6 +92,9 @@ _DEFAULTS = {
     "hold_key": "super+f",
     "hold_min_ms": 200,  # por debajo se considera tap (primer toggle)
     "hold_devices": [],  # nombres (substring) de teclados; [] = todos
+    # OSD: auto = GTK+layer-shell si hay Wayland, si no Tk (XWayland)
+    "osd_backend": "auto",
+    "osd_margin_top": 80,
 }
 
 # Paths por defecto de vocabulario/correcciones (XDG)
@@ -144,6 +150,9 @@ class Config:
     hold_key: str = "super+f"
     hold_min_ms: int = 200
     hold_devices: list[str] = field(default_factory=list)
+    # OSD: auto = GTK+layer-shell en Wayland; tk = XWayland
+    osd_backend: str = "auto"
+    osd_margin_top: int = 80
     # {regex de ventana: archivo de vocabulario} — vocabulario contextual por app
     app_vocab: dict[str, str] = field(default_factory=dict)
     vocabulary_file: Path = _default_vocab_path()
@@ -176,11 +185,17 @@ class Config:
             data["hold_min_ms"] = hold_min if hold_min >= 0 else 200
         except (TypeError, ValueError):
             data["hold_min_ms"] = 200
+        try:
+            data["osd_margin_top"] = max(0, int(data.get("osd_margin_top", 80)))
+        except (TypeError, ValueError):
+            data["osd_margin_top"] = 80
         return cls(**{k: v for k, v in data.items() if k in {f.name for f in fields(cls)}})
 
 
 # Claves de texto plano (evita que caigan en la rama bool del parser de env)
-_STR_KEYS = {"language", "model", "device", "compute_type", "mic", "wake_word_model", "hold_key"}
+_STR_KEYS = {
+    "language", "model", "device", "compute_type", "mic", "wake_word_model", "hold_key", "osd_backend",
+}
 
 
 def _apply_env(data: dict) -> None:
@@ -192,6 +207,8 @@ def _apply_env(data: dict) -> None:
             data[key] = None if key == "language" and raw == "auto" else raw
         elif key in ("beam_size", "max_record_seconds", "silence_threshold_ms"):
             data[key] = int(raw)
+        elif key == "osd_margin_top":
+            data[key] = max(0, int(raw))
         elif key == "hold_min_ms":
             value = int(raw)
             data[key] = value if value >= 0 else 200

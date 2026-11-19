@@ -7,24 +7,12 @@ consultando el socket (`level`) ~10 veces/seg.
 
 from __future__ import annotations
 
-import json
-import socket
 import sys
 import time
 
+from .osd_backend import query_level
 
-def query_level(sock_path: str, timeout: float = 0.5) -> dict | None:
-    """Pregunta al daemon: {recording, elapsed, rms, partial}."""
-    try:
-        s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-        s.settimeout(timeout)
-        s.connect(sock_path)
-        s.sendall(b"level\n")
-        resp = s.recv(4096).decode().strip()
-        s.close()
-        return json.loads(resp) if resp.startswith("{") else None
-    except Exception:
-        return None
+__all__ = ["Overlay", "query_level", "main"]
 
 
 class Overlay:

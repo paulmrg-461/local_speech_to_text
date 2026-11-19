@@ -853,6 +853,17 @@ def cmd_doctor(args):
             failures += not _check(hold == "running", "Hold listener", hold,
                                    "Reinicia el daemon: systemctl --user restart local-stt", warn=True)
 
+    # 5e. OSD (informativo: Tk siempre funciona, GTK es la mejora)
+    from .osd_backend import describe, gtk_layer_available, select_backend
+
+    osd_backend, osd_reason = select_backend(cfg.osd_backend)
+    osd_line = describe(osd_backend, osd_reason)
+    if cfg.osd_backend.lower() == "gtk" and not gtk_layer_available():
+        failures += not _check(False, "OSD", osd_line,
+                               "osd_backend=gtk forzado pero GTK/layer-shell no importa: usa auto", warn=True)
+    else:
+        _check(True, "OSD", osd_line, "")
+
     # 6. Atajo
     if cfg.push_to_talk:
         _check(True, "Atajo Win+F", f"gestionado por push-to-talk ({cfg.hold_key})", "")

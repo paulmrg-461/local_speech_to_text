@@ -30,6 +30,8 @@ _MENU = [
     ("silence_stop", "Auto-stop por silencio", "bool", None),
     ("silence_threshold_ms", "Silencio para parar (ms)", "int", None),
     ("overlay", "OSD flotante", "bool", None),
+    ("osd_backend", "OSD backend", "choice", ["auto", "gtk", "tk"]),
+    ("osd_margin_top", "OSD margen superior (px)", "int", None),
     ("partial_results", "Texto parcial en vivo", "bool", None),
     ("numbers_to_digits", "Números hablados a dígitos", "bool", None),
     ("streaming", "Streaming (dictados largos)", "bool", None),

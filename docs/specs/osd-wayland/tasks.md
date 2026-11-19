@@ -1,5 +1,8 @@
 # Tareas — OSD nativo Wayland
 
+> **Estado (2026-11-19):** T1-T7 implementadas y con tests. T8 (prueba visual en
+> KDE Wayland/GNOME/X11) pendiente de hardware/sesión.
+
 Atómicas y ordenadas. Ninguna se implementa sin aprobar esta lista (fase 4).
 Tests: éxito / fallo / seguridad cuando aplique.
 
