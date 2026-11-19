@@ -62,16 +62,32 @@ def probe_env(base: dict | None = None) -> dict:
 
 def query_level(sock_path: str, timeout: float = 0.5) -> dict | None:
     """Pregunta al daemon: {recording, elapsed, rms, partial, hold}."""
+    s = None
     try:
         s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         s.settimeout(timeout)
         s.connect(sock_path)
         s.sendall(b"level\n")
-        resp = s.recv(4096).decode().strip()
-        s.close()
+        chunks: list[bytes] = []
+        total = 0
+        while total < 65536:  # lee hasta EOF o newline, no un único recv
+            chunk = s.recv(4096)
+            if not chunk:
+                break
+            chunks.append(chunk)
+            total += len(chunk)
+            if b"\n" in chunk:
+                break
+        resp = b"".join(chunks).decode().strip()
         return json.loads(resp) if resp.startswith("{") else None
     except Exception:
         return None
+    finally:
+        if s is not None:
+            try:
+                s.close()
+            except Exception:
+                pass
 
 
 def bar_fraction(rms: float, full_scale: float = 0.15) -> float:

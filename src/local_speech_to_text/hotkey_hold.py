@@ -289,7 +289,14 @@ class EvdevSource(EventSource):
     def poll(self, timeout: float) -> list[KeyEvent]:
         from select import select
 
+        # Hotplug ANTES del early return: si se desconectó el último teclado,
+        # _devices queda vacío y hay que seguir intentando _discover().
+        now = time.monotonic()
+        if now - self._last_scan > 5.0:
+            self._last_scan = now
+            self._discover()
         if not self._devices:
+            time.sleep(timeout)  # sin teclados: no busy-loop
             return []
         events: list[KeyEvent] = []
         try:
@@ -308,11 +315,6 @@ class EvdevSource(EventSource):
                 name = self._ecodes.KEY.get(ev.code, "")
                 if name:
                     events.append(KeyEvent(name, ev.value, dev.name or ""))
-        # Hotplug: los event* cambian al reconectar teclados.
-        now = time.monotonic()
-        if now - self._last_scan > 5.0:
-            self._last_scan = now
-            self._discover()
         return events
 
     def close(self) -> None:

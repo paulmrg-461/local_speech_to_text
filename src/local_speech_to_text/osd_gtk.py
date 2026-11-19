@@ -114,6 +114,7 @@ def run(sock: str, margin: int = DEFAULT_MARGIN, preview: float | None = None) -
 
     app = Gtk.Application(application_id="io.github.paulmrg461.LocalSttOsd")
     started = time.monotonic()
+    misses = 0
 
     def activate(application: Gtk.Application) -> None:
         win = Gtk.ApplicationWindow(application=application)
@@ -159,6 +160,7 @@ def run(sock: str, margin: int = DEFAULT_MARGIN, preview: float | None = None) -
         win.present()
 
         def tick() -> bool:
+            nonlocal misses
             if preview is not None:
                 elapsed = time.monotonic() - started
                 if elapsed > preview:
@@ -167,6 +169,11 @@ def run(sock: str, margin: int = DEFAULT_MARGIN, preview: float | None = None) -
                 info = preview_info(elapsed)
             else:
                 info = query_level(sock)
+                if info is None:
+                    # Un timeout puntual (servidor ocupado) no debe matar el OSD.
+                    misses += 1
+                    return misses < 10
+                misses = 0
                 if should_exit(info):
                     application.quit()
                     return False

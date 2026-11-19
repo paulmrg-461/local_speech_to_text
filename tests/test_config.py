@@ -32,6 +32,24 @@ def test_lang_auto_es_none(monkeypatch):
     assert cfg.language is None
 
 
+def test_cli_no_pisa_language_sin_flag(monkeypatch, tmp_path):
+    """Sin --lang, env/TOML deben ganar (antes el default 'es' los pisaba)."""
+    from argparse import Namespace
+
+    from local_speech_to_text.cli import _config_from_args
+
+    monkeypatch.setenv("LOCAL_STT_LANG", "en")
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
+    args = Namespace(model=None, lang=None, device=None, compute=None)
+    assert _config_from_args(args).language == "en"
+
+    args.lang = "auto"
+    assert _config_from_args(args).language is None
+
+    args.lang = "es"
+    assert _config_from_args(args).language == "es"
+
+
 def test_override_cli_gana_sobre_todo(monkeypatch, tmp_path):
     cfg_file = tmp_path / "config.toml"
     cfg_file.write_text('model = "small"\n')

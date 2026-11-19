@@ -71,6 +71,7 @@ def test_argv_tk_si_select_dice_tk(monkeypatch):
 
     assert backend == "tk"
     assert argv[1:3] == ["-m", "local_speech_to_text.osd"]
+    assert argv[-2:] == ["--margin", "80"]
 
 
 def test_argv_tk_si_no_hay_python_de_sistema(monkeypatch):

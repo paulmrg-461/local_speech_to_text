@@ -272,6 +272,23 @@ def test_chord_parseado_una_sola_vez():
     assert isinstance(parse_chord("super+f"), HoldChord)
 
 
+def test_reload_durante_dictado_no_tira_el_modelo(monkeypatch):
+    from local_speech_to_text import daemon as daemon_mod
+
+    d, _ = _daemon_stub(monkeypatch)
+    d.transcriber = object()
+    d.corrections = []
+    d.recorder.is_recording = True
+    new_cfg = replace(d.config, language="en")
+    monkeypatch.setattr(daemon_mod.Config, "load", classmethod(lambda cls, **kw: new_cfg))
+
+    out = d.reload_config()
+
+    assert d._pending_model_reload is True
+    assert d.transcriber is not None  # no se descarga en mitad del dictado
+    assert "al terminar" in out
+
+
 def test_reload_reinicia_listener_al_cambiar_hold(monkeypatch):
     from local_speech_to_text import daemon as daemon_mod
 

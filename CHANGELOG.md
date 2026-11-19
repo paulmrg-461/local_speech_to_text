@@ -21,6 +21,21 @@ El proyecto sigue [SemVer](https://semver.org/lang/es/) de forma pragmática:
   capa no inicializaba. El daemon/preview añaden `LD_PRELOAD` automáticamente y
   el sondeo exige `Gtk4LayerShell.is_supported()`, así que no se elige GTK
   cuando la capa no puede funcionar.
+- CLI: `--lang` ya no pisa `language` de env/TOML al no pasarse; `--lang auto`
+  fuerza autodetección aunque el TOML fije idioma.
+- `setup` no desregistra `Win+F` si `hold_devices` no coincide con ningún
+  teclado (antes dejaba al usuario sin atajo).
+- OSD: el parcial se recorta a 300 chars y `query_level` lee hasta newline; un
+  timeout puntual ya no cierra el OSD (tolera ~1 s). El backend Tk respeta
+  `osd_margin_top`.
+- Push-to-talk: el rescaneo de hotplug se reintenta aunque no queden teclados
+  (antes quedaba muerto hasta reiniciar).
+- Daemon: pid lock (imposible arrancar dos), `umask 077` durante el bind del
+  socket, EOF en el socket ya no arranca una grabación, y `reload` aplica
+  idioma/beam/VAD sin descargar el modelo en mitad de un dictado.
+- `doctor` cuenta como fallo (no aviso) los problemas de push-to-talk cuando
+  está activado; `config` normaliza `hold_key`/`osd_backend` ante TOML con
+  tipos inesperados; `query_level` cierra siempre el socket.
 
 ## [0.2.0] - 2026-11-19
 

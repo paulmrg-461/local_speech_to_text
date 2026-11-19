@@ -60,9 +60,10 @@ def test_title_text_segun_modo():
 def test_tk_parse_argv():
     from local_speech_to_text.osd import parse_argv
 
-    assert parse_argv([]) == ("/tmp/local-stt.sock", None)
-    assert parse_argv(["/tmp/y.sock"]) == ("/tmp/y.sock", None)
-    assert parse_argv(["/tmp/y.sock", "--preview", "--seconds", "1.5"]) == ("/tmp/y.sock", 1.5)
+    assert parse_argv([]) == ("/tmp/local-stt.sock", 80, None)
+    assert parse_argv(["/tmp/y.sock"]) == ("/tmp/y.sock", 80, None)
+    assert parse_argv(["/tmp/y.sock", "--preview", "--seconds", "1.5"]) == ("/tmp/y.sock", 80, 1.5)
+    assert parse_argv(["/tmp/y.sock", "--margin", "120"]) == ("/tmp/y.sock", 120, None)
 
 
 @pytest.mark.parametrize(

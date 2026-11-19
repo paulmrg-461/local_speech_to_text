@@ -189,6 +189,11 @@ class Config:
             data["osd_margin_top"] = max(0, int(data.get("osd_margin_top", 80)))
         except (TypeError, ValueError):
             data["osd_margin_top"] = 80
+        for key in ("hold_key", "osd_backend"):
+            if data.get(key) is not None:
+                data[key] = str(data[key])
+        if data.get("osd_backend") not in ("auto", "gtk", "tk"):
+            data["osd_backend"] = "auto"
         return cls(**{k: v for k, v in data.items() if k in {f.name for f in fields(cls)}})
 
 

@@ -48,13 +48,18 @@ def _service_installed(user_unit: Path | None = None, system_unit: Path | None =
 
 def _config_from_args(args) -> Config:
     """Config final: CLI (solo si se pasó) > env > TOML > defaults."""
-    lang = None if getattr(args, "lang", "es") == "auto" else getattr(args, "lang", "es")
-    return Config.load(
+    from dataclasses import replace
+
+    raw_lang = getattr(args, "lang", None)
+    cfg = Config.load(
         model=getattr(args, "model", None),
-        language=lang,
+        language=None if raw_lang in (None, "auto") else raw_lang,
         device=getattr(args, "device", None),
         compute_type=getattr(args, "compute", None),
     )
+    if raw_lang == "auto":  # forzar autodetección aunque el TOML fije idioma
+        cfg = replace(cfg, language=None)
+    return cfg
 
 
 def _autostart_daemon(cfg: Config) -> bool:
@@ -368,8 +373,8 @@ INPUT_GROUP_HINT = (
 
 
 def _hold_ready(cfg) -> tuple[bool, str]:
-    """(listo, motivo) para push-to-talk: evdev + permiso + teclado legible."""
-    from .hotkey_hold import parse_chord
+    """(listo, motivo) para push-to-talk: evdev + permiso + teclado que case."""
+    from .hotkey_hold import device_matches, parse_chord
 
     chord = parse_chord(cfg.hold_key)
     if chord is None:
@@ -383,10 +388,18 @@ def _hold_ready(cfg) -> tuple[bool, str]:
         return False, f"tecla no soportada: {chord.key}"
     if not _input_group_ok():
         return False, "usuario fuera del grupo input"
-    device = _hold_device_hint()
-    if device.startswith(("sin permiso", "falta", "ningún")):
-        return False, device
-    return True, device
+    try:
+        boards = [name for name, _ in _list_keyboards()]
+    except PermissionError:
+        return False, "sin permiso para /dev/input/event*"
+    except Exception as e:
+        return False, f"no se pudieron leer los teclados: {e}"
+    if not boards:
+        return False, "ningún teclado legible"
+    matched = [name for name in boards if device_matches(name, cfg.hold_devices)]
+    if not matched:
+        return False, f"hold_devices no coincide con ningún teclado ({', '.join(boards[:3])})"
+    return True, matched[0]
 
 
 def _list_keyboards() -> list[tuple[str, str]]:
@@ -877,11 +890,11 @@ def cmd_doctor(args):
         ok_group = _input_group_ok()
         failures += not _check(ok_group, "Grupo input",
                                "usuario en grupo input" if ok_group else "usuario FUERA del grupo input",
-                               INPUT_GROUP_HINT, warn=True)
+                               INPUT_GROUP_HINT, warn=False)
         device = _hold_device_hint()
         readable = not device.startswith(("sin permiso", "falta", "ningún"))
         failures += not _check(readable, "Teclado evdev", device,
-                               "Sin lectura de /dev/input no hay hold", warn=True)
+                               "Sin lectura de /dev/input no hay hold", warn=False)
         if readable and cfg.hold_devices:
             from .hotkey_hold import device_matches
 
@@ -894,6 +907,7 @@ def cmd_doctor(args):
                 bool(matched), "Allowlist",
                 f"{len(matched)}/{len(boards)} teclados coinciden",
                 f"Ninguno coincide con {cfg.hold_devices}; revisa: local-stt keyboards",
+                warn=False,
             )
         if not cfg.hold_devices:
             _check(True, "Allowlist", "vacía: escucha todos los teclados",
@@ -902,7 +916,7 @@ def cmd_doctor(args):
             status = send_command("status", cfg.socket_path)
             hold = status.split("hold=")[-1].split()[0] if "hold=" in status else "?"
             failures += not _check(hold == "running", "Hold listener", hold,
-                                   "Reinicia el daemon: systemctl --user restart local-stt", warn=True)
+                                   "Reinicia el daemon: systemctl --user restart local-stt", warn=False)
 
     # 5e. OSD (informativo: Tk siempre funciona, GTK es la mejora)
     from .osd_backend import describe, gtk_layer_available, select_backend
@@ -996,7 +1010,7 @@ def main(argv: list[str] | None = None):
     p = argparse.ArgumentParser(prog="local-stt", description="Dictado local RTX 5070: Win+F -> copiar -> Ctrl+V")
     p.add_argument("--version", "-V", action="version", version=f"local-stt {_version()}")
     p.add_argument("--model", default=None, help="Modelo faster-whisper (default: large-v3-turbo)")
-    p.add_argument("--lang", default="es", help="Idioma: es, en, auto (default: es)")
+    p.add_argument("--lang", default=None, help="Idioma: es, en, auto (default: config/TOML)")
     p.add_argument("--device", default=None, choices=["cuda", "cpu"], help="cuda o cpu")
     p.add_argument("--compute", default=None, help="float16, int8_float16, float32, int8")
 

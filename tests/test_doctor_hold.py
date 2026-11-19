@@ -89,7 +89,16 @@ def test_hold_ready_tecla_no_soportada(monkeypatch):
 def test_hold_ready_ok(monkeypatch):
     pytest.importorskip("evdev")
     monkeypatch.setattr(cli, "_input_group_ok", lambda: True)
-    monkeypatch.setattr(cli, "_hold_device_hint", lambda: "AT Translated Set 2 keyboard (/dev/input/event3)")
+    monkeypatch.setattr(cli, "_list_keyboards", lambda: [("AT Translated Set 2 keyboard", "/dev/input/event3")])
     ok, why = cli._hold_ready(_cfg())
     assert ok is True
-    assert "event3" in why
+    assert "AT Translated" in why
+
+
+def test_hold_ready_allowlist_sin_coincidencias(monkeypatch):
+    pytest.importorskip("evdev")
+    monkeypatch.setattr(cli, "_input_group_ok", lambda: True)
+    monkeypatch.setattr(cli, "_list_keyboards", lambda: [("Logitech USB Keyboard", "/dev/input/event5")])
+    ok, why = cli._hold_ready(_cfg(hold_devices=["AT Translated"]))
+    assert ok is False
+    assert "hold_devices no coincide" in why

@@ -6,7 +6,10 @@ import json
 import stat
 import threading
 import time
+from dataclasses import replace
+from pathlib import Path
 
+from local_speech_to_text.config import Config
 from local_speech_to_text.daemon import Daemon
 
 
@@ -85,9 +88,9 @@ def test_comando_start_stop_idempotentes(tmp_path):
 def test_comando_toggle_y_desconocido(tmp_path):
     d = _daemon(tmp_path)
     assert d._handle_command("toggle") == "ok"
-    assert d._handle_command("") == "ok"
+    assert d._handle_command("") == "unknown"  # EOF: no debe arrancar el micro
     assert d._handle_command("nope") == "unknown"
-    assert d.calls == ["start", "stop"]
+    assert d.calls == ["start"]  # ni "" ni "nope" tocaron la grabación
 
 
 def test_status_incluye_hold_y_origen(tmp_path):
@@ -104,6 +107,28 @@ def test_level_incluye_hold(tmp_path):
     payload = json.loads(d._handle_command("level"))
     assert payload["hold"] == "off"
     assert payload["recording"] is False
+
+
+def test_level_recorta_parcial_largo(tmp_path):
+    """El acumulado de streaming no debe superar el buffer del OSD."""
+    d = _daemon(tmp_path)
+    d._partial_text = "x" * 5000
+    payload = json.loads(d._handle_command("level"))
+    assert len(payload["partial"]) == 300
+
+
+def test_pid_lock_impide_dos_daemons(tmp_path):
+    pid = tmp_path / "daemon.pid"
+    d1 = _daemon(tmp_path)
+    d1.config = replace(Config.load(config_file=Path("/no/existe.toml")), pid_path=pid)
+    d2 = _daemon(tmp_path)
+    d2.config = d1.config
+
+    assert d1._acquire_pid_lock() is True
+    assert d2._acquire_pid_lock() is False
+    d1._release_pid_lock()
+    assert d2._acquire_pid_lock() is True
+    d2._release_pid_lock()
 
 
 def _serve_and_stat(d: Daemon) -> int:

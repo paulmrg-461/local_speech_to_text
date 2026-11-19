@@ -131,6 +131,16 @@ def test_config_hold_devices_normaliza_tipos_y_espacios(monkeypatch, tmp_path):
     assert Config.load(config_file=cfg_file).hold_devices == ["AT Translated", "3"]
 
 
+def test_config_normaliza_hold_key_y_osd_backend(monkeypatch, tmp_path):
+    """Un TOML con tipos raros no debe tumbar el daemon al arrancar."""
+    _clean_env(monkeypatch)
+    cfg_file = tmp_path / "config.toml"
+    cfg_file.write_text("hold_key = 5\nosd_backend = 5\n")
+    cfg = Config.load(config_file=cfg_file)
+    assert cfg.hold_key == "5"
+    assert cfg.osd_backend == "auto"
+
+
 def test_config_defaults_sin_fichero(monkeypatch):
     _clean_env(monkeypatch)
     cfg = Config.load(config_file=Path("/no/existe.toml"))

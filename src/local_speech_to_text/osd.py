@@ -24,12 +24,14 @@ __all__ = ["Overlay", "parse_argv", "query_level", "main"]
 
 DEFAULT_SOCK = "/tmp/local-stt.sock"
 DEFAULT_PREVIEW = 6.0
+DEFAULT_MARGIN = 80
 
 
-def parse_argv(argv: list[str]) -> tuple[str, float | None]:
-    """(socket, segundos de preview) para el OSD Tk."""
+def parse_argv(argv: list[str]) -> tuple[str, int, float | None]:
+    """(socket, margen superior, segundos de preview) para el OSD Tk."""
     args = list(argv)
     sock = DEFAULT_SOCK
+    margin = DEFAULT_MARGIN
     preview: float | None = None
     if "--preview" in args:
         preview = DEFAULT_PREVIEW
@@ -38,22 +40,28 @@ def parse_argv(argv: list[str]) -> tuple[str, float | None]:
         idx = args.index("--seconds")
         preview = float(args[idx + 1])
         del args[idx:idx + 2]
+    if "--margin" in args:
+        idx = args.index("--margin")
+        margin = int(args[idx + 1])
+        del args[idx:idx + 2]
     rest = [a for a in args if not a.startswith("--")]
     if rest:
         sock = rest[0]
-    return sock, preview
+    return sock, margin, preview
 
 
 class Overlay:
     W, H = 420, 72
     BAR_MAX = 0.15  # RMS que llena la barra
 
-    def __init__(self, sock_path: str, preview: float | None = None):
+    def __init__(self, sock_path: str, preview: float | None = None, margin: int = DEFAULT_MARGIN):
         import tkinter as tk
 
         self.sock_path = sock_path
         self.preview = preview
+        self.margin = margin
         self._started = time.monotonic()
+        self._misses = 0
         self.tk = tk
         self.root = tk.Tk()
         self.root.title("local-stt")
@@ -65,7 +73,7 @@ class Overlay:
             pass
         sw = self.root.winfo_screenwidth()
         x = (sw - self.W) // 2
-        self.root.geometry(f"{self.W}x{self.H}+{x}+80")
+        self.root.geometry(f"{self.W}x{self.H}+{x}+{self.margin}")
         self.root.configure(bg="#1a1a2e")
 
         tk.Label(self.root, text=title_text(os.environ.get("LOCAL_STT_HOLD") == "1"), fg="#e0e0e0",
@@ -88,6 +96,14 @@ class Overlay:
             info = preview_info(elapsed)
         else:
             info = query_level(self.sock_path)
+            if info is None:
+                self._misses += 1
+                if self._misses < 10:  # ~1s de socket ocupado: no cerrar
+                    self.root.after(100, self._tick)
+                    return
+                self.root.destroy()
+                return
+            self._misses = 0
             if should_exit(info):
                 self.root.destroy()
                 return
@@ -104,9 +120,9 @@ class Overlay:
 
 
 def main() -> None:
-    sock, preview = parse_argv(sys.argv[1:])
+    sock, margin, preview = parse_argv(sys.argv[1:])
     try:
-        Overlay(sock, preview).run()
+        Overlay(sock, preview, margin).run()
     except Exception as e:
         print(f"[osd] no disponible: {e}", file=sys.stderr)
         if preview is not None:

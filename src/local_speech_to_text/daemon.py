@@ -44,6 +44,8 @@ class Daemon:
         self._partial_busy = False
         self._stream_text = ""  # segmentos ya transcritos (dictados largos)
         self._stream_processed = 0  # muestras ya confirmadas
+        self._pending_model_reload = False  # cambiar modelo/idioma en pleno dictado
+        self._pid_lock_fd: int | None = None
         self.wake_monitor = None  # WakeWordMonitor | None
         self.hold_listener = None  # HotkeyListener | None (push-to-talk)
         self.hold_status = "off"  # off | waiting | running | no-permission | no-evdev | bad-chord
@@ -208,6 +210,10 @@ class Daemon:
         threading.Thread(target=_detect, daemon=True).start()
 
     def _start_recording(self):
+        if self._pending_model_reload:
+            self._pending_model_reload = False
+            self.transcriber = None  # aplica el modelo/idioma nuevos al terminar
+            self.corrections = []
         self._ensure_model()
         self._partial_text = ""
         self._stream_text = ""
@@ -261,7 +267,10 @@ class Daemon:
             if python and script.exists():
                 return [python, str(script), sock, "--margin", str(self.config.osd_margin_top)], "gtk"
             print("[daemon] sin python del sistema con GTK: OSD en Tk")
-        return [sys.executable, "-m", "local_speech_to_text.osd", sock], "tk"
+        return [
+            sys.executable, "-m", "local_speech_to_text.osd", sock,
+            "--margin", str(self.config.osd_margin_top),
+        ], "tk"
 
     def _osd_env(self, backend: str) -> dict:
         """Entorno del OSD: LD_PRELOAD para GTK y modo hold para el título."""
@@ -302,7 +311,8 @@ class Daemon:
         self._osd_choice = ("tk", "fallback tras fallo de GTK")
         try:
             self._osd_proc = subprocess.Popen(
-                [sys.executable, "-m", "local_speech_to_text.osd", str(self._sock_path)],
+                [sys.executable, "-m", "local_speech_to_text.osd", str(self._sock_path),
+                 "--margin", str(self.config.osd_margin_top)],
                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                 start_new_session=True, env=self._osd_env("tk"),
             )
@@ -321,6 +331,10 @@ class Daemon:
                 proc.wait(timeout=1.0)
             except subprocess.TimeoutExpired:
                 proc.kill()
+                try:
+                    proc.wait(timeout=1.0)  # evita zombie si ignoró SIGTERM
+                except Exception:
+                    pass
         except Exception:
             pass
 
@@ -374,7 +388,9 @@ class Daemon:
             "recording": self.recorder.is_recording,
             "elapsed": round(self.recorder.elapsed, 1),
             "rms": round(self.recorder.current_rms, 5),
-            "partial": self._partial_text,
+            # El OSD solo pinta 90 chars: no mandar el acumulado entero
+            # (superaba el buffer del recv y el OSD se cerraba).
+            "partial": self._partial_text[-300:],
             "hold": self.hold_status,
         })
 
@@ -480,15 +496,25 @@ class Daemon:
         """Relee config (TOML + env). El modelo se recarga solo si cambió."""
         old = self.config
         new = Config.load()
-        changed = [k for k in ("model", "device", "compute_type") if getattr(old, k) != getattr(new, k)]
+        changed = [
+            k for k in ("model", "device", "compute_type", "language", "beam_size", "vad_filter")
+            if getattr(old, k) != getattr(new, k)
+        ]
         self.config = new
         # aplicar live-settings al recorder
         self.recorder.silence_rms = new.silence_rms
         self.recorder.mic = new.mic
+        pending = False
         if changed:
-            print(f"[daemon] Config cambió {changed}: se recargará el modelo en el próximo dictado")
-            self.transcriber = None  # descarga VRAM; se recarga lazy en el próximo toggle
-            self.corrections = []
+            if self.recorder.is_recording:
+                # No tirar el modelo en mitad de un dictado: se pierde el texto.
+                self._pending_model_reload = True
+                pending = True
+                print(f"[daemon] Config cambió {changed}: se aplicará al terminar este dictado")
+            else:
+                print(f"[daemon] Config cambió {changed}: se recargará el modelo en el próximo dictado")
+                self.transcriber = None  # descarga VRAM; se recarga lazy en el próximo toggle
+                self.corrections = []
         else:
             # vocab/correcciones se recargan al recargar el modelo; aplicar ya las correcciones
             from .vocab import load_corrections
@@ -510,7 +536,8 @@ class Daemon:
             print(f"[daemon] push-to-talk: {self.hold_status}")
         # OSD: el backend se re-sondea en el próximo dictado
         self._osd_choice = None
-        return f"ok recargado: model={new.model} lang={new.language or 'auto'}"
+        suffix = " (modelo/idioma al terminar el dictado)" if pending else ""
+        return f"ok recargado: model={new.model} lang={new.language or 'auto'}{suffix}"
 
     # --- Socket IPC para toggle desde atajo ---
     def _handle_command(self, data: str) -> str:
@@ -524,9 +551,12 @@ class Daemon:
         if data == "stop":
             self.stop_recording()
             return "ok"
-        if data in ("toggle", ""):
+        if data == "toggle":
             self.toggle()
             return "ok"
+        if data == "":
+            # EOF/cliente que conecta y cierra: NUNCA debe arrancar el micro.
+            return "unknown"
         if data == "reload":
             try:
                 return self.reload_config()
@@ -552,7 +582,18 @@ class Daemon:
             except Exception:
                 pass
         srv = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-        srv.bind(str(self._sock_path))
+        # umask estricto durante bind: sin esto el socket nace 0755 y otro
+        # usuario local podría conectar antes del chmod.
+        old_umask = os.umask(0o077)
+        try:
+            srv.bind(str(self._sock_path))
+        except OSError as e:
+            srv.close()
+            print(f"[daemon] no pude crear el socket {self._sock_path}: {e}")
+            self.stop()
+            return
+        finally:
+            os.umask(old_umask)
         srv.listen(5)
         # Solo el dueño del daemon: otro usuario local no debe arrancar el micro
         # ni parar el dictado.
@@ -588,6 +629,33 @@ class Daemon:
         except Exception:
             pass
 
+    def _acquire_pid_lock(self) -> bool:
+        """Lock exclusivo del pid: dos daemons = dos modelos en VRAM."""
+        import fcntl
+
+        fd = None
+        try:
+            self.config.pid_path.parent.mkdir(parents=True, exist_ok=True)
+            fd = os.open(self.config.pid_path, os.O_CREAT | os.O_RDWR, 0o600)
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError:
+            if fd is not None:
+                os.close(fd)
+            return False
+        os.ftruncate(fd, 0)
+        os.write(fd, str(os.getpid()).encode())
+        self._pid_lock_fd = fd
+        return True
+
+    def _release_pid_lock(self) -> None:
+        if self._pid_lock_fd is None:
+            return
+        try:
+            os.close(self._pid_lock_fd)
+        except Exception:
+            pass
+        self._pid_lock_fd = None
+
     def start(self):
         try:  # log en tiempo real cuando la salida va a archivo/journal
             import sys
@@ -596,13 +664,11 @@ class Daemon:
             sys.stderr.reconfigure(line_buffering=True)
         except Exception:
             pass
+        if not self._acquire_pid_lock():
+            print("[daemon] ya hay otro daemon en marcha (pid lock ocupado); salgo")
+            return
         self._ensure_model()
         self._running = True
-        # Escribir pid
-        try:
-            self.config.pid_path.write_text(str(os.getpid()))
-        except Exception:
-            pass
         # Manejar señales
         for sig in (signal.SIGINT, signal.SIGTERM):
             try:
@@ -627,6 +693,7 @@ class Daemon:
             self.stop()
 
     def stop(self):
+        self._release_pid_lock()
         if not self._running:
             return
         print("[daemon] Saliendo...")
