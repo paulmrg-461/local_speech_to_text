@@ -1,6 +1,6 @@
 [project]
 name = "local-speech-to-text"
-version = "0.1.0"
+version = "0.2.0"
 description = "Dictado local en Linux con RTX 5070: Win+F para transcribir y copiar al portapapeles"
 readme = "README.md"
 requires-python = ">=3.11"
