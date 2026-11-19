@@ -337,12 +337,18 @@ dictation_commands = true  # spoken punctuation
 silence_stop = false       # true = stop recording after silence_threshold_ms of silence
 silence_threshold_ms = 1500
 overlay = true             # floating OSD while recording
+osd_backend = "auto"       # auto | gtk (layer-shell) | tk (XWayland)
+osd_margin_top = 80        # distance from the top edge
 partial_results = true     # live partial transcription in the OSD
 partial_interval = 1.5     # seconds between partials
+# push_to_talk = true      # hold the key to dictate (needs python-evdev, see below)
+# hold_key = "super+f"
+# hold_min_ms = 200        # shorter = first toggle
+# hold_devices = ["AT Translated"]   # [] = every keyboard
 # wake_word = false        # hands-free ("hey jarvis") — see above
 ```
 
-Environment equivalents: `LOCAL_STT_MODEL`, `LOCAL_STT_LANG`, `LOCAL_STT_DEVICE`, `LOCAL_STT_COMPUTE`, `LOCAL_STT_BEAM`, `LOCAL_STT_MAX_SECS`, `LOCAL_STT_AUTO_PASTE`, `LOCAL_STT_DICTATION_COMMANDS`, `LOCAL_STT_SILENCE_STOP`, `LOCAL_STT_SILENCE_MS`, `LOCAL_STT_VAD`, `LOCAL_STT_VOCAB`, `LOCAL_STT_CORRECTIONS`, `LOCAL_STT_OVERLAY`, `LOCAL_STT_PARTIAL`, `LOCAL_STT_PARTIAL_SECS`, `LOCAL_STT_WAKE_WORD`, `LOCAL_STT_WAKE_MODEL`, `LOCAL_STT_WAKE_THRESHOLD`.
+Environment equivalents: `LOCAL_STT_MODEL`, `LOCAL_STT_LANG`, `LOCAL_STT_DEVICE`, `LOCAL_STT_COMPUTE`, `LOCAL_STT_BEAM`, `LOCAL_STT_MAX_SECS`, `LOCAL_STT_AUTO_PASTE`, `LOCAL_STT_DICTATION_COMMANDS`, `LOCAL_STT_SILENCE_STOP`, `LOCAL_STT_SILENCE_MS`, `LOCAL_STT_VAD`, `LOCAL_STT_VOCAB`, `LOCAL_STT_CORRECTIONS`, `LOCAL_STT_OVERLAY`, `LOCAL_STT_OSD_BACKEND`, `LOCAL_STT_OSD_MARGIN`, `LOCAL_STT_PARTIAL`, `LOCAL_STT_PARTIAL_SECS`, `LOCAL_STT_WAKE_WORD`, `LOCAL_STT_WAKE_MODEL`, `LOCAL_STT_WAKE_THRESHOLD`, `LOCAL_STT_PUSH_TO_TALK`, `LOCAL_STT_HOLD_KEY`, `LOCAL_STT_HOLD_MIN_MS`, `LOCAL_STT_HOLD_DEVICES`.
 
 ### Models & VRAM (RTX 5070 12GB)
 
@@ -368,7 +374,7 @@ Win+F (khotkeys / gsettings shortcut)
       └─ unix socket /tmp/local-stt.sock → Daemon (model kept in VRAM)
             ├─ AudioRecorder   (sounddevice, 16kHz mono, RMS tracking for silence)
             ├─ Partial worker  (beam-1 re-transcription of the last 10s, feeds the OSD)
-            ├─ OSD subprocess  (tkinter: voice bar + partial text, polls "level")
+            ├─ OSD subprocess  (GTK4 layer-shell, o Tk/XWayland de fallback: barra + parcial, consulta "level")
             ├─ Transcriber     (faster-whisper CUDA; cuBLAS 12 preloaded via ctypes)
             ├─ text_cleaner    ("punto y coma" → ";")
             ├─ corrections     (word-boundary replacements from corrections.txt)
@@ -424,7 +430,7 @@ Not implemented yet — documented so expectations are clear:
 
 | Item | Status | Notes |
 |---|---|---|
-| **CI (GitHub Actions)** | ✅ done | `.github/workflows/ci.yml` runs the 93 unit tests (matrix 3.11/3.13) + `ruff check` on every push/PR. Slim deps (no GPU wheels): heavy imports are lazy, so tests only need `numpy` + `text2num` + `pytest`. |
+| **CI (GitHub Actions)** | ✅ done | `.github/workflows/ci.yml` runs 4 jobs: tests (Python 3.11/3.13/3.14, slim deps), ruff, build (wheel + `python-installer`, same path as the AUR package) and audio (PortAudio, so recorder tests run). Heavy imports stay lazy. |
 | **AUR / PKGBUILD** | ✅ done | `packaging/aur/` ships a source PKGBUILD (AUR deps for the Python stack, cuBLAS 12 bundled from the PyPI wheel into `/usr/lib/local-stt/cublas`). Uninstall via `pacman -R local-stt`; `local-stt uninstall` stays user-level only. |
 | **Push-to-talk (hold key)** | ✅ done | `push_to_talk = true` + `python-evdev`: hold `Win+F` to record, release to transcribe. Opt-in because it needs read access to `/dev/input` (grupo `input`). See [Push-to-talk](#push-to-talk-hold-to-dictate). |
 | **Custom Spanish wake word** | ❌ | openWakeWord ships English-trained models ("hey jarvis", "alexa"…). A custom "oye computadora" requires training a model (synthetic TTS data + fine-tune). |
