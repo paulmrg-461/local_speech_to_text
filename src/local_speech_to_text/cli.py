@@ -127,6 +127,25 @@ def cmd_osd(args):
         if not available:
             print("  sudo pacman -S --needed gtk4 python-gobject gtk4-layer-shell")
     print(f"overlay: {'on' if cfg.overlay else 'off'} · margen: {cfg.osd_margin_top}px")
+    if getattr(args, "preview", False):
+        if backend == "gtk" and not available:
+            print("No puedo previsualizar GTK: instala las dependencias de arriba.")
+            sys.exit(1)
+        seconds = float(getattr(args, "seconds", 6.0))
+        if backend == "gtk":
+            argv = [
+                find_system_python() or "python3",
+                str(Path(__file__).with_name("osd_gtk.py")),
+                "--preview", "--seconds", str(seconds),
+            ]
+        else:
+            argv = [
+                sys.executable, "-m", "local_speech_to_text.osd",
+                "--preview", "--seconds", str(seconds),
+            ]
+        print(f"Vista previa del OSD ({backend}, {seconds:g}s)...")
+        subprocess.run(argv, timeout=seconds + 5)
+        return
     if getattr(args, "check", False):
         sys.exit(0 if available else 1)
 
@@ -982,6 +1001,10 @@ def main(argv: list[str] | None = None):
     osd = sub.add_parser("osd", help="Estado del OSD (backend, dependencias y margen)")
     osd.add_argument("--check", action="store_true",
                      help="exit 1 si el backend configurado no puede arrancar")
+    osd.add_argument("--preview", action="store_true",
+                     help="Muestra el OSD unos segundos sin dictar")
+    osd.add_argument("--seconds", type=float, default=6.0,
+                     help="Duración de la vista previa (default 6s)")
     osd.set_defaults(func=cmd_osd)
 
     q = sub.add_parser("stop", help="Detiene el daemon")

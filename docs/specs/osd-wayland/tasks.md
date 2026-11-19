@@ -66,6 +66,7 @@ Tests: éxito / fallo / seguridad cuando aplique.
 - KDE Wayland: overlay, no roba foco (`wtype`), multi-monitor, terminar con
   Win+F y por socket.
 - GNOME Wayland y X11: Tk sin errores.
+- Atajo: `local-stt osd --preview --seconds 4` muestra el OSD sin dictar.
 - Registrar resultados en este fichero.
 
 **DoD:** RF-4, RF-5, RNF-3 verificados en hardware.

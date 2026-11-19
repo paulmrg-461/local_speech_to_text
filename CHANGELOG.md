@@ -11,6 +11,9 @@ El proyecto sigue [SemVer](https://semver.org/lang/es/) de forma pragmática:
   robar foco) lanzado con el python del sistema; fallback automático a Tk en
   GNOME/X11. `osd_backend = auto|gtk|tk`, `osd_margin_top`, sondeo cacheado y
   `doctor` informa del backend elegido.
+- `local-stt osd`: backend elegido, dependencias y `--check`; `--preview`
+  muestra el OSD N segundos con datos sintéticos (verificación visual sin
+  dictar).
 
 ## [0.2.0] - 2026-11-19
 

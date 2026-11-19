@@ -14,13 +14,21 @@ def test_import_sin_gi():
 
 
 def test_parse_args_defaults():
-    assert osd_gtk.parse_args([]) == ("/tmp/local-stt.sock", 80)
+    assert osd_gtk.parse_args([]) == ("/tmp/local-stt.sock", 80, None)
 
 
 def test_parse_args_socket_y_margen():
-    sock, margin = osd_gtk.parse_args(["/tmp/x.sock", "--margin", "120"])
+    sock, margin, preview = osd_gtk.parse_args(["/tmp/x.sock", "--margin", "120"])
     assert sock == "/tmp/x.sock"
     assert margin == 120
+    assert preview is None
+
+
+def test_parse_args_preview():
+    assert osd_gtk.parse_args(["--preview"]) == ("/tmp/local-stt.sock", 80, 6.0)
+    sock, _, preview = osd_gtk.parse_args(["--preview", "--seconds", "2.5"])
+    assert sock == "/tmp/local-stt.sock"
+    assert preview == 2.5
 
 
 def test_parse_args_ignora_check():

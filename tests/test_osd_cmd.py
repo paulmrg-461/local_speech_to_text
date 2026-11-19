@@ -66,3 +66,60 @@ def test_osd_gtk_disponible_check_ok(monkeypatch, capsys):
 
     out = capsys.readouterr().out
     assert "sí" in out
+
+
+def test_osd_preview_tk_ejecuta_el_modulo(monkeypatch, capsys):
+    _cfg(monkeypatch)
+    monkeypatch.setattr(osd_backend, "select_backend", lambda forced="auto", **kw: ("tk", "x11"))
+    monkeypatch.setattr(osd_backend, "find_system_python", lambda: "/usr/bin/python3")
+    launched = {}
+    monkeypatch.setattr(cli.subprocess, "run", lambda argv, **kw: launched.setdefault("argv", argv))
+    args = Args()
+    args.preview = True
+    args.seconds = 3.0
+
+    cli.cmd_osd(args)
+
+    argv = launched["argv"]
+    assert argv[1:3] == ["-m", "local_speech_to_text.osd"]
+    assert "--preview" in argv
+    assert "3.0" in argv
+    assert "Vista previa" in capsys.readouterr().out
+
+
+def test_osd_preview_gtk_usa_el_script(monkeypatch):
+    _cfg(monkeypatch)
+    monkeypatch.setattr(osd_backend, "select_backend", lambda forced="auto", **kw: ("gtk", "wayland"))
+    monkeypatch.setattr(osd_backend, "find_system_python", lambda: "/usr/bin/python3")
+    monkeypatch.setattr(osd_backend, "gtk_layer_available", lambda **kw: True)
+    launched = {}
+    monkeypatch.setattr(cli.subprocess, "run", lambda argv, **kw: launched.setdefault("argv", argv))
+    args = Args()
+    args.preview = True
+    args.seconds = 2.0
+
+    cli.cmd_osd(args)
+
+    argv = launched["argv"]
+    assert argv[0] == "/usr/bin/python3"
+    assert argv[1].endswith("osd_gtk.py")
+    assert "--preview" in argv
+
+
+def test_osd_preview_gtk_sin_deps_no_lanza(monkeypatch, capsys):
+    _cfg(monkeypatch)
+    monkeypatch.setattr(osd_backend, "select_backend", lambda forced="auto", **kw: ("gtk", "wayland"))
+    monkeypatch.setattr(osd_backend, "gtk_layer_available", lambda **kw: False)
+
+    def _boom(*a, **k):
+        pytest.fail("no debe lanzar el OSD si GTK no está disponible")
+
+    monkeypatch.setattr(cli.subprocess, "run", _boom)
+    args = Args()
+    args.preview = True
+    args.seconds = 2.0
+
+    with pytest.raises(SystemExit) as exc:
+        cli.cmd_osd(args)
+    assert exc.value.code == 1
+    assert "instala las dependencias" in capsys.readouterr().out

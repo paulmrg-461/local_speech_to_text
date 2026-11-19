@@ -7,6 +7,7 @@ aquí es stdlib: se puede importar y testear sin GTK ni Tk.
 from __future__ import annotations
 
 import json
+import math
 import os
 import shutil
 import socket
@@ -53,6 +54,17 @@ def format_status(info: dict) -> str:
 def should_exit(info: dict | None) -> bool:
     """El OSD se cierra si el daemon no responde o ya no graba."""
     return info is None or not info.get("recording")
+
+
+def preview_info(elapsed: float) -> dict:
+    """Datos sintéticos para `--preview`: mismo contrato que el socket."""
+    rms = 0.06 + 0.05 * abs(math.sin(elapsed * 2.0))
+    return {
+        "recording": True,
+        "elapsed": elapsed,
+        "rms": round(rms, 4),
+        "partial": "Vista previa del OSD · así se verá mientras dictas",
+    }
 
 
 def find_system_python() -> str | None:

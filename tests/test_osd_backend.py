@@ -42,6 +42,24 @@ def test_should_exit(info, expected):
     assert ob.should_exit(info) is expected
 
 
+def test_preview_info_contrato():
+    info = ob.preview_info(0.0)
+    assert info["recording"] is True
+    assert info["elapsed"] == 0.0
+    assert 0.0 <= info["rms"] <= 0.15
+    assert "Vista previa" in info["partial"]
+    assert ob.format_status(ob.preview_info(3.0)).startswith("[   3s]")
+    assert ob.should_exit(info) is False
+
+
+def test_tk_parse_argv():
+    from local_speech_to_text.osd import parse_argv
+
+    assert parse_argv([]) == ("/tmp/local-stt.sock", None)
+    assert parse_argv(["/tmp/y.sock"]) == ("/tmp/y.sock", None)
+    assert parse_argv(["/tmp/y.sock", "--preview", "--seconds", "1.5"]) == ("/tmp/y.sock", 1.5)
+
+
 @pytest.mark.parametrize(
     "session,wayland,probe,forced,expected",
     [

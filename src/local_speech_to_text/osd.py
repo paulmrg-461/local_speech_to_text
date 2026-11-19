@@ -10,19 +10,48 @@ from __future__ import annotations
 import sys
 import time
 
-from .osd_backend import bar_fraction, format_status, query_level, should_exit
+from .osd_backend import (
+    bar_fraction,
+    format_status,
+    preview_info,
+    query_level,
+    should_exit,
+)
 
-__all__ = ["Overlay", "query_level", "main"]
+__all__ = ["Overlay", "parse_argv", "query_level", "main"]
+
+DEFAULT_SOCK = "/tmp/local-stt.sock"
+DEFAULT_PREVIEW = 6.0
+
+
+def parse_argv(argv: list[str]) -> tuple[str, float | None]:
+    """(socket, segundos de preview) para el OSD Tk."""
+    args = list(argv)
+    sock = DEFAULT_SOCK
+    preview: float | None = None
+    if "--preview" in args:
+        preview = DEFAULT_PREVIEW
+        args.remove("--preview")
+    if "--seconds" in args:
+        idx = args.index("--seconds")
+        preview = float(args[idx + 1])
+        del args[idx:idx + 2]
+    rest = [a for a in args if not a.startswith("--")]
+    if rest:
+        sock = rest[0]
+    return sock, preview
 
 
 class Overlay:
     W, H = 420, 72
     BAR_MAX = 0.15  # RMS que llena la barra
 
-    def __init__(self, sock_path: str):
+    def __init__(self, sock_path: str, preview: float | None = None):
         import tkinter as tk
 
         self.sock_path = sock_path
+        self.preview = preview
+        self._started = time.monotonic()
         self.tk = tk
         self.root = tk.Tk()
         self.root.title("local-stt")
@@ -49,10 +78,17 @@ class Overlay:
         self.status.pack(fill="x")
 
     def _tick(self) -> None:
-        info = query_level(self.sock_path)
-        if should_exit(info):
-            self.root.destroy()
-            return
+        if self.preview is not None:
+            elapsed = time.monotonic() - self._started
+            if elapsed > self.preview:
+                self.root.destroy()
+                return
+            info = preview_info(elapsed)
+        else:
+            info = query_level(self.sock_path)
+            if should_exit(info):
+                self.root.destroy()
+                return
         rms = info.get("rms", 0.0)
         self.bar_cv.itemconfigure(self.bar, width=int(bar_fraction(rms, self.BAR_MAX) * (self.W - 40)))
         color = "#00c853" if rms >= 0.008 else "#5c6bc0"
@@ -66,11 +102,13 @@ class Overlay:
 
 
 def main() -> None:
-    sock = sys.argv[1] if len(sys.argv) > 1 else "/tmp/local-stt.sock"
+    sock, preview = parse_argv(sys.argv[1:])
     try:
-        Overlay(sock).run()
+        Overlay(sock, preview).run()
     except Exception as e:
         print(f"[osd] no disponible: {e}", file=sys.stderr)
+        if preview is not None:
+            return
         # sin overlay no pasa nada: espera a que acabe la grabación y sale limpio
         info = query_level(sock)
         while info and info.get("recording"):

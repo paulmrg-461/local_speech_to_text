@@ -281,6 +281,8 @@ The GTK backend runs as a standalone script with the **system** Python (the venv
 
 ```bash
 sudo pacman -S --needed gtk4 python-gobject gtk4-layer-shell   # native OSD
+local-stt osd --check                                          # 0 = backend can start
+local-stt osd --preview --seconds 4                            # see the OSD without dictating
 ```
 
 ### Contextual vocabulary per app (optional)
