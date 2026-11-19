@@ -121,6 +121,7 @@ auto-pasted with `Ctrl+V` where your cursor was.
 | **`local-stt config`** | Interactive menu for every setting (Enter keeps each value) |
 | **`local-stt keyboards`** | Lists readable keyboards and marks which ones your `hold_devices` allowlist matches |
 | **`local-stt osd`** | Shows the OSD backend (GTK layer-shell or Tk), why it was chosen and how to enable the native one (`--check` for scripts) |
+| **`local-stt wakeword`** | Shows the active wake word, its resolved `.onnx` path and the bundled models |
 | **`local-stt reload`** | Applies config changes instantly (no restart, no VRAM loss) |
 | **`local-stt doctor`** | Diagnoses GPU, CUDA, daemon, hotkeys, clipboard tools, mic |
 
@@ -316,6 +317,8 @@ wake_word_threshold = 0.5
 ```
 
 Runs entirely on CPU (~0% GPU). The monitor pauses while you dictate so it can't re-trigger itself. It listens continuously — turn it off (`wake_word = false` + `local-stt reload`) if you don't want an always-on microphone.
+
+`local-stt wakeword` shows the active model, its resolved path and the bundled models (`--check` exits 1 if the model is missing while enabled). To use a custom model, point `wake_word_model` at any `.onnx` file.
 
 ---
 

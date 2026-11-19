@@ -33,6 +33,25 @@ def resolve_model_path(name: str) -> str:
     return name
 
 
+def list_models() -> list[str]:
+    """Modelos .onnx de wake word incluidos (sin los de soporte ni versión)."""
+    try:
+        import openwakeword
+
+        models_dir = Path(openwakeword.__file__).parent / "resources" / "models"
+    except ImportError:
+        return []
+    if not models_dir.is_dir():
+        return []
+    support = ("embedding_model", "melspectrogram", "silero_vad")
+    names = {
+        p.stem.replace("_v0.1", "")
+        for p in models_dir.glob("*.onnx")
+        if not p.stem.startswith(support)
+    }
+    return sorted(names)
+
+
 class WakeWordMonitor:
     """Escucha continua en un hilo; llama on_wake() al detectar la palabra."""
 

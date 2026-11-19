@@ -240,6 +240,29 @@ def cmd_history(args):
         print(f"#{i:<3} {e['ts']}  {e['text'][:100]}")
 
 
+def cmd_wakeword(args):
+    """Estado del wake word: activo, modelo resuelto y modelos incluidos."""
+    from .wakeword import list_models, resolve_model_path
+
+    cfg = _config_from_args(args)
+    path = resolve_model_path(cfg.wake_word_model)
+    exists = path.endswith(".onnx") and Path(path).exists()
+    print(f"wake_word: {'on' if cfg.wake_word else 'off'} · modelo: {cfg.wake_word_model} "
+          f"· umbral: {cfg.wake_word_threshold}")
+    print(f"ruta: {path} {'(ok)' if exists else '(no encontrada)'}")
+    models = list_models()
+    if models:
+        print("incluidos: " + ", ".join(models))
+    else:
+        print("openWakeWord no instalado o sin modelos (extra [wakeword])")
+    if cfg.wake_word and not exists:
+        print("⚠️  el modelo no existe: el wake word no arrancará")
+        if args.check:
+            sys.exit(1)
+    if args.check:
+        sys.exit(0)
+
+
 def cmd_download(args):
     """Pre-descarga el modelo a ~/.cache/huggingface (sin tocar la GPU)."""
     from .clipboard import notify
@@ -1098,6 +1121,11 @@ def main(argv: list[str] | None = None):
 
     dl = sub.add_parser("download", help="Pre-descarga el modelo (primer uso instantáneo)")
     dl.set_defaults(func=cmd_download)
+
+    wk = sub.add_parser("wakeword", help="Estado del wake word y modelos incluidos")
+    wk.add_argument("--check", action="store_true",
+                    help="exit 1 si está activo y el modelo no existe")
+    wk.set_defaults(func=cmd_wakeword)
 
     doc = sub.add_parser("doctor", help="Diagnóstico completo: GPU, daemon, atajo, micro...")
     doc.set_defaults(func=cmd_doctor)
