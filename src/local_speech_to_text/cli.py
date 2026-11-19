@@ -326,12 +326,16 @@ def _hold_ready(cfg) -> tuple[bool, str]:
     """(listo, motivo) para push-to-talk: evdev + permiso + teclado legible."""
     from .hotkey_hold import parse_chord
 
-    if parse_chord(cfg.hold_key) is None:
+    chord = parse_chord(cfg.hold_key)
+    if chord is None:
         return False, f"hold_key inválido: {cfg.hold_key!r}"
     try:
         import evdev  # noqa: F401
+        from evdev import ecodes
     except ImportError:
         return False, "falta python-evdev (extra [hold])"
+    if not hasattr(ecodes, chord.key):
+        return False, f"tecla no soportada: {chord.key}"
     if not _input_group_ok():
         return False, "usuario fuera del grupo input"
     device = _hold_device_hint()

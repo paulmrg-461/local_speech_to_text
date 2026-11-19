@@ -38,10 +38,11 @@ _MENU = [
     ("push_to_talk", "Push-to-talk (mantener tecla)", "bool", None),
     ("hold_key", "Tecla hold (super+f)", "str", None),
     ("hold_min_ms", "Tap mínimo para hold (ms)", "int", None),
+    ("hold_devices", "Teclados para hold (coma; vacío=todos)", "list", None),
 ]
 
 _ORDER = [k for k, *_ in _MENU] + [
-    "stream_window", "partial_interval", "wake_word_threshold", "sample_rate", "hold_devices",
+    "stream_window", "partial_interval", "wake_word_threshold", "sample_rate",
 ]
 _BOOL_KEYS = {k for k, _, t, _ in _MENU if t == "bool"}
 
@@ -99,6 +100,12 @@ def _ask(label: str, kind: str, current, options: list | None):
         if new.isdigit() and int(new) < len(opts):
             return opts[int(new)]
         return new if new in opts else current
+    if kind == "list":
+        current_txt = ", ".join(current or [])
+        new = input(f"{label} [{current_txt}] (coma, Enter=keep): ").strip()
+        if new == "":
+            return current
+        return [item.strip() for item in new.split(",") if item.strip()]
     # str
     new = input(f"{label} [{current}] (Enter=keep): ").strip()
     return current if new == "" else new

@@ -36,6 +36,21 @@ def test_render_conserva_hold_devices():
     assert "hold_devices = []" in _render({"hold_devices": []})
 
 
+def test_ask_lista_parsea_comas(monkeypatch):
+    from local_speech_to_text.config_tui import _ask
+
+    monkeypatch.setattr("builtins.input", lambda *a, **k: "AT Translated, Logitech")
+    assert _ask("Teclados", "list", [], None) == ["AT Translated", "Logitech"]
+
+    monkeypatch.setattr("builtins.input", lambda *a, **k: "")
+    assert _ask("Teclados", "list", ["X"], None) == ["X"]
+
+
+def test_render_no_duplica_hold_devices():
+    out = _render({"hold_devices": ["A"]})
+    assert out.count("hold_devices =") == 1
+
+
 def test_run_tui_sin_tty_solo_muestra(monkeypatch, tmp_path, capsys):
     monkeypatch.setattr("sys.stdin", io.StringIO(""))  # isatty False en StringIO
     cfg_file = tmp_path / "config.toml"

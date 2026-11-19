@@ -162,6 +162,14 @@ def test_start_ok_y_stop():
     assert source.closed
 
 
+def test_evdev_rechaza_chord_con_tecla_inexistente():
+    pytest.importorskip("evdev", reason="requiere el extra [hold]")
+    from local_speech_to_text.hotkey_hold import EvdevSource
+
+    source = EvdevSource({"KEY_XYZ"}, chord_key="KEY_XYZ")
+    assert source.open() == "bad-chord"
+
+
 # --- cableado con el daemon ----------------------------------------------
 
 class _FakeRecorder:

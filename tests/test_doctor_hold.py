@@ -74,6 +74,18 @@ def test_hold_ready_chord_invalido(monkeypatch):
     assert "hold_key" in why
 
 
+def test_hold_ready_tecla_no_soportada(monkeypatch):
+    import sys
+    import types
+
+    fake = types.ModuleType("evdev")
+    fake.ecodes = types.SimpleNamespace(KEY_F=33)
+    monkeypatch.setitem(sys.modules, "evdev", fake)
+    ok, why = cli._hold_ready(_cfg(hold_key="super+xyz"))
+    assert ok is False
+    assert "no soportada" in why
+
+
 def test_hold_ready_ok(monkeypatch):
     pytest.importorskip("evdev")
     monkeypatch.setattr(cli, "_input_group_ok", lambda: True)

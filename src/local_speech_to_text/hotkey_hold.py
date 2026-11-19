@@ -211,9 +211,15 @@ class EvdevSource(EventSource):
     debe pertenecer al grupo `input`.
     """
 
-    def __init__(self, watched_keys: set[str], allowlist: tuple[str, ...] | list[str] = ()):
+    def __init__(
+        self,
+        watched_keys: set[str],
+        allowlist: tuple[str, ...] | list[str] = (),
+        chord_key: str | None = None,
+    ):
         self._watched = watched_keys
         self._allowlist = tuple(allowlist)
+        self._chord_key = chord_key
         self._devices: dict[str, object] = {}
         self._codes: set[int] = set()
         self._last_scan = 0.0
@@ -228,6 +234,9 @@ class EvdevSource(EventSource):
             return "no-evdev"
         self._evdev = evdev
         self._ecodes = ecodes
+        # Un chord con tecla inexistente nunca dispararía: mejor decirlo.
+        if self._chord_key and not hasattr(ecodes, self._chord_key):
+            return "bad-chord"
         self._codes = {getattr(ecodes, name) for name in self._watched if hasattr(ecodes, name)}
         denied = self._discover()
         if not self._devices:
@@ -327,7 +336,7 @@ class HotkeyListener:
         self.chord = chord
         self.machine = HoldStateMachine(chord, min_ms=min_ms, on_start=on_start, on_stop=on_stop)
         self._source = source or EvdevSource(
-            watched_keys={chord.key, *MODIFIER_KEYS}, allowlist=allowlist
+            watched_keys={chord.key, *MODIFIER_KEYS}, allowlist=allowlist, chord_key=chord.key
         )
         self._on_status = on_status
         self._mods: set[str] = set()
