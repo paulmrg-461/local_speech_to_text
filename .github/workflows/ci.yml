@@ -5,8 +5,8 @@
 # dependencias: numpy + text2num + pytest. Esto evita bajar ctranslate2 y
 # nvidia-cublas-cu12 (~1 GB) por cada push.
 #
-# Nota: los tests usan tomllib (Python >= 3.11); 3.10 queda fuera de la
-# matrix aunque pyproject declare requires-python >= 3.10.
+# Nota: se usa tomllib (Python >= 3.11); pyproject declara el mismo mínimo.
+# La matrix cubre el mínimo soportado y las versiones actuales.
 
 name: CI
 
@@ -21,7 +21,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python: ["3.11", "3.13"]
+        python: ["3.11", "3.13", "3.14"]
     steps:
       - uses: actions/checkout@v4
 
@@ -70,3 +70,28 @@ jobs:
           python -m build --wheel --no-isolation --outdir dist .
           python -m installer --destdir="$PWD/pkg" --prefix=/usr dist/*.whl
           test -x pkg/usr/bin/local-stt
+
+  audio:
+    # El job `test` es slim y se salta los tests que necesitan backend de
+    # audio. Este los ejecuta de verdad con PortAudio (sin GPU ni modelos).
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: PortAudio
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libportaudio2
+
+      - name: Instalar (sin deps pesadas)
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e . --no-deps
+          pip install numpy text2num pytest sounddevice soundfile
+
+      - name: Tests con audio
+        run: python -m pytest tests/ -q

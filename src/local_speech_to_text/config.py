@@ -166,8 +166,11 @@ class Config:
         for key in ("vocabulary_file", "corrections_file"):
             if key in data and data[key] is not None:
                 data[key] = Path(data[key]).expanduser()
-        if isinstance(data.get("hold_devices"), str):
-            data["hold_devices"] = [d.strip() for d in data["hold_devices"].split(",") if d.strip()]
+        devices = data.get("hold_devices")
+        if isinstance(devices, str):
+            devices = devices.split(",")
+        # TOML puede traer números/None: se normaliza a lista de nombres.
+        data["hold_devices"] = [str(d).strip() for d in (devices or []) if str(d).strip()]
         try:
             hold_min = int(data.get("hold_min_ms", 200))
             data["hold_min_ms"] = hold_min if hold_min >= 0 else 200

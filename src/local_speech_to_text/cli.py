@@ -315,8 +315,9 @@ def _input_group_ok(group_ids: list[int] | None = None, input_gid: int | None = 
     return input_gid in set(group_ids)
 
 
+INPUT_GROUP_CMD = "sudo usermod -aG input $USER"
 INPUT_GROUP_HINT = (
-    "Añade tu usuario al grupo input: sudo usermod -aG input $USER y re-loguea. "
+    f"Añade tu usuario al grupo input: {INPUT_GROUP_CMD} y re-loguea. "
     "Ojo: el grupo input permite leer TODO el teclado (equivale a un keylogger); "
     "limita con hold_devices = [\"nombre del teclado\"]."
 )
@@ -416,6 +417,10 @@ def cmd_setup(args):
             else:
                 print(f"   ⚠️  push_to_talk activo pero no disponible ({why})")
                 print("      mantengo Win+F en modo toggle hasta que lo resuelvas")
+                if "python-evdev" in why:
+                    print("      instala: .venv/bin/pip install 'local-speech-to-text[hold]'")
+                elif "input" in why:
+                    print(f"      {INPUT_GROUP_CMD} y re-loguea")
         r = subprocess.run(["bash", str(hotkey)], env=env, timeout=60,
                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         print("   ✅ registrados" if r.returncode == 0 else

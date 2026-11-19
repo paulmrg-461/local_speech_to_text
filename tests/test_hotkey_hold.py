@@ -124,6 +124,13 @@ def test_config_hold_devices_como_string_toml(monkeypatch, tmp_path):
     assert Config.load(config_file=cfg_file).hold_devices == ["AT Translated", "Logitech"]
 
 
+def test_config_hold_devices_normaliza_tipos_y_espacios(monkeypatch, tmp_path):
+    _clean_env(monkeypatch)
+    cfg_file = tmp_path / "config.toml"
+    cfg_file.write_text('hold_devices = [" AT Translated ", 3, ""]\n')
+    assert Config.load(config_file=cfg_file).hold_devices == ["AT Translated", "3"]
+
+
 def test_config_defaults_sin_fichero(monkeypatch):
     _clean_env(monkeypatch)
     cfg = Config.load(config_file=Path("/no/existe.toml"))

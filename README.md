@@ -436,7 +436,9 @@ local-stt uninstall --yes --purge                  # servicio + atajos + config 
 .venv/bin/python -m pytest tests/ -q
 ```
 
-Pure-Python logic (text cleaning, config layering, vocabulary, corrections, OSD protocol) is unit-tested; GPU/daemon paths are covered by `local-stt doctor` and an end-to-end toggle.
+Pure-Python logic (text cleaning, config layering, vocabulary, corrections, OSD protocol, push-to-talk state machine) is unit-tested; GPU/daemon paths are covered by `local-stt doctor` and an end-to-end toggle.
+
+CI (`.github/workflows/ci.yml`) runs four jobs: `test` (Python 3.11/3.13/3.14, slim deps; audio/GPU tests skip), `lint` (ruff), `build` (wheel + `python-installer`, the same path as the AUR package) and `audio` (PortAudio installed, so recorder tests run for real).
 
 ## License
 
