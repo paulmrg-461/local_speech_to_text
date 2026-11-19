@@ -36,7 +36,7 @@ pkgbase = local-stt
 	noextract = nvidia_cublas_cu12-12.6.4.1-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl
 	source = https://github.com/paulmrg-461/local_speech_to_text/archive/refs/tags/v0.3.0/local-stt-0.3.0.tar.gz
 	source = https://files.pythonhosted.org/packages/af/eb/ff4b8c503fa1f1796679dce648854d58751982426e4e4b37d6fce49d259c/nvidia_cublas_cu12-12.6.4.1-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl
-	sha256sums = 302c29db30dc73b78f037373f67e91b8bca3d3411c6cf9748c66388c5342a548
+	sha256sums = 12472e962153761152253844083d1d8b33fb731bbd5a394d09dd785b1dfd3b21
 	sha256sums = 08ed2686e9875d01b58e3cb379c6896df8e76c75e0d4a7f7dace3d7b6d9ef8eb
 
 pkgname = local-stt
