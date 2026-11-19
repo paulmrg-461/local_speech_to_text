@@ -541,7 +541,10 @@ def cmd_setup(args):
         if cfg.socket_path.exists():
             # Aplica push-to-talk/OSD/idioma sin reiniciar (no recarga el modelo).
             resp = send_command("reload", cfg.socket_path)
-            print(f"   ✅ config aplicada: {resp}")
+            if resp.startswith("ok"):
+                print(f"   ✅ config aplicada: {resp}")
+            else:
+                print(f"   ⚠️  no se pudo aplicar en caliente: {resp}")
     else:
         print("   ⚠️  sin unit systemd; corre 'local-stt daemon' manualmente")
 
