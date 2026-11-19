@@ -48,6 +48,9 @@ _ENV_MAP = {
     "wake_word": "LOCAL_STT_WAKE_WORD",
     "wake_word_model": "LOCAL_STT_WAKE_MODEL",
     "wake_word_threshold": "LOCAL_STT_WAKE_THRESHOLD",
+    "wake_word_engine": "LOCAL_STT_WAKE_ENGINE",
+    "wake_word_phrase": "LOCAL_STT_WAKE_PHRASE",
+    "vosk_model_path": "LOCAL_STT_VOSK_MODEL",
     "numbers_to_digits": "LOCAL_STT_NUMBERS",
     "streaming": "LOCAL_STT_STREAMING",
     "stream_window": "LOCAL_STT_STREAM_WINDOW",
@@ -83,6 +86,9 @@ _DEFAULTS = {
     "wake_word": False,  # true: "hey jarvis" arranca el dictado sin teclado
     "wake_word_model": "hey_jarvis",  # o ruta a .onnx custom
     "wake_word_threshold": 0.5,
+    "wake_word_engine": "openwakeword",  # openwakeword | vosk (frase propia)
+    "wake_word_phrase": "dev paul",  # solo vosk
+    "vosk_model_path": "",  # vacío = ~/.local/share/local-stt/vosk-model-*
     "numbers_to_digits": False,  # true: "tres coma catorce" -> 3,14 (opinional, ver README)
     "streaming": True,  # dictados largos: confirma ventanas y solo transcribe la cola
     "stream_window": 12.0,  # segundos por ventana confirmada
@@ -143,6 +149,9 @@ class Config:
     wake_word: bool = False
     wake_word_model: str = "hey_jarvis"
     wake_word_threshold: float = 0.5
+    wake_word_engine: str = "openwakeword"  # openwakeword | vosk
+    wake_word_phrase: str = "dev paul"  # frase para vosk
+    vosk_model_path: str = ""  # vacío = autodetecta vosk-model-*
     numbers_to_digits: bool = False
     streaming: bool = True  # dictados largos: confirma ventanas, al parar solo transcribe la cola
     stream_window: float = 12.0
@@ -197,13 +206,19 @@ class Config:
                 data[key] = str(data[key])
         if data.get("osd_backend") not in ("auto", "gtk", "tk"):
             data["osd_backend"] = "auto"
+        for key in ("wake_word_engine", "wake_word_phrase", "vosk_model_path"):
+            if data.get(key) is not None:
+                data[key] = str(data[key])
+        if data.get("wake_word_engine") not in ("openwakeword", "vosk"):
+            data["wake_word_engine"] = "openwakeword"
         return cls(**{k: v for k, v in data.items() if k in {f.name for f in fields(cls)}})
 
 
 # Claves de texto plano (evita que caigan en la rama bool del parser de env)
 _STR_KEYS = {
     "language", "model", "device", "compute_type", "mic", "wake_word_model",
-    "hold_key", "osd_backend", "osd_monitor",
+    "hold_key", "osd_backend", "osd_monitor", "wake_word_engine", "wake_word_phrase",
+    "vosk_model_path",
 }
 
 

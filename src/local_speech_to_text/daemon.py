@@ -148,21 +148,38 @@ class Daemon:
             self.hold_status = "off"
 
     def _maybe_start_wake_word(self) -> None:
-        """Arranca el monitor de wake word si config.wake_word está activo."""
+        """Arranca el monitor de wake word según el motor configurado."""
         if self.wake_monitor or not self.config.wake_word:
             return
         try:
-            from .wakeword import WakeWordMonitor, resolve_model_path
+            engine = getattr(self.config, "wake_word_engine", "openwakeword")
+            if engine == "vosk":
+                from .wakeword import VoskMonitor, find_vosk_model
 
-            monitor = WakeWordMonitor(
-                on_wake=self._on_wake,
-                model_path=resolve_model_path(self.config.wake_word_model),
-                threshold=self.config.wake_word_threshold,
-                sample_rate=self.config.sample_rate,
-            )
+                model = find_vosk_model(self.config.vosk_model_path)
+                if model is None:
+                    print("[daemon] wake word Vosk sin modelo: local-stt wakeword --download-vosk")
+                    return
+                monitor = VoskMonitor(
+                    on_wake=self._on_wake,
+                    model_path=str(model),
+                    phrase=self.config.wake_word_phrase,
+                    sample_rate=self.config.sample_rate,
+                )
+                label = f"'{self.config.wake_word_phrase}' (vosk)"
+            else:
+                from .wakeword import WakeWordMonitor, resolve_model_path
+
+                monitor = WakeWordMonitor(
+                    on_wake=self._on_wake,
+                    model_path=resolve_model_path(self.config.wake_word_model),
+                    threshold=self.config.wake_word_threshold,
+                    sample_rate=self.config.sample_rate,
+                )
+                label = f"'{self.config.wake_word_model}'"
             if monitor.start():
                 self.wake_monitor = monitor
-                notify("Local STT", f"Manos libres: di '{self.config.wake_word_model}' para dictar")
+                notify("Local STT", f"Manos libres: di {label} para dictar")
         except Exception as e:
             print(f"[daemon] wake word no arrancó: {e}")
 
@@ -524,12 +541,17 @@ class Daemon:
 
             self.corrections = load_corrections(new.corrections_file)
             print("[daemon] Config recargada en caliente (modelo sin cambios)")
-        # wake word: aplicar cambio al vuelo
-        if new.wake_word and not self.wake_monitor:
-            self._maybe_start_wake_word()
-        elif not new.wake_word and self.wake_monitor:
-            print("[daemon] Wake word desactivado")
+        # wake word: aplicar motor/modelo/frase y on/off al vuelo
+        old_wake = (old.wake_word, old.wake_word_engine, old.wake_word_model,
+                    old.wake_word_phrase, old.vosk_model_path)
+        new_wake = (new.wake_word, new.wake_word_engine, new.wake_word_model,
+                    new.wake_word_phrase, new.vosk_model_path)
+        if old_wake != new_wake:
             self._stop_wake_word()
+            if new.wake_word:
+                self._maybe_start_wake_word()
+            else:
+                print("[daemon] Wake word desactivado")
         # push-to-talk: aplicar cambios de modo/chord/devices al vuelo
         old_hold = (old.push_to_talk, old.hold_key, old.hold_min_ms, tuple(old.hold_devices))
         new_hold = (new.push_to_talk, new.hold_key, new.hold_min_ms, tuple(new.hold_devices))

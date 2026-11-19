@@ -18,7 +18,7 @@
 | 🖥️ Live OSD | Floating indicator with a real-time voice-level bar **and partial transcription while you speak**. Native Wayland layer-shell on KDE/wlroots; Tk/XWayland fallback elsewhere |
 | 🕘 History | Last 100 dictations saved locally (`local-stt history`, wofi/rofi picker, re-copy any entry) |
 | 🔥 Hot reload | Change model/language/vocabulary without restarting the daemon (`local-stt reload`) |
-| 🤚 Wake word (optional) | Say **"hey jarvis"** and dictation starts — no keyboard at all (CPU, openWakeWord) |
+| 🤚 Wake word (optional) | Say **"hey jarvis"** and dictation starts — no keyboard at all (CPU, openWakeWord). Custom phrases like **"DevPaul"** via Vosk (`wake_word_engine = "vosk"`) |
 | ✋ Push-to-talk (optional) | **Hold Win+F** to record, release to transcribe (real key release via `evdev`; see [Push-to-talk](#push-to-talk-hold-to-dictate)) |
 | 🩺 `local-stt doctor` | One command diagnoses GPU, CUDA, daemon, hotkey, clipboard tools and microphone |
 
@@ -320,6 +320,24 @@ Runs entirely on CPU (~0% GPU). The monitor pauses while you dictate so it can't
 
 `local-stt wakeword` shows the active model, its resolved path and the bundled models (`--check` exits 1 if the model is missing while enabled). To use a custom model, point `wake_word_model` at any `.onnx` file.
 
+#### Custom phrase without training ("DevPaul", "oye computadora")
+
+openWakeWord only ships English phrases. For your own phrase use the Vosk keyword-spotting engine (local, CPU, grammar-limited):
+
+```bash
+.venv/bin/pip install 'local-speech-to-text[vosk]'      # or pacman: python-vosk
+local-stt wakeword --download-vosk --vosk-lang en       # es for Spanish (~40 MB)
+```
+
+```toml
+wake_word = true
+wake_word_engine = "vosk"
+wake_word_phrase = "dev paul"     # say "DevPaul"; es: "oye computadora"
+# vosk_model_path = ""            # autodetecta ~/.local/share/local-stt/vosk-model-*
+```
+
+`local-stt wakeword` verifies deps/model/phrase and `--check` is script-friendly. Vosk decodes only the phrase (plus `[unk]`), which keeps CPU low but can produce false positives with short phrases; use two words or a distinctive name.
+
 ---
 
 ## Configuration
@@ -353,7 +371,7 @@ partial_interval = 1.5     # seconds between partials
 # wake_word = false        # hands-free ("hey jarvis") — see above
 ```
 
-Environment equivalents: `LOCAL_STT_MODEL`, `LOCAL_STT_LANG`, `LOCAL_STT_DEVICE`, `LOCAL_STT_COMPUTE`, `LOCAL_STT_BEAM`, `LOCAL_STT_MAX_SECS`, `LOCAL_STT_AUTO_PASTE`, `LOCAL_STT_DICTATION_COMMANDS`, `LOCAL_STT_SILENCE_STOP`, `LOCAL_STT_SILENCE_MS`, `LOCAL_STT_VAD`, `LOCAL_STT_VOCAB`, `LOCAL_STT_CORRECTIONS`, `LOCAL_STT_OVERLAY`, `LOCAL_STT_OSD_BACKEND`, `LOCAL_STT_OSD_MARGIN`, `LOCAL_STT_PARTIAL`, `LOCAL_STT_PARTIAL_SECS`, `LOCAL_STT_WAKE_WORD`, `LOCAL_STT_WAKE_MODEL`, `LOCAL_STT_WAKE_THRESHOLD`, `LOCAL_STT_PUSH_TO_TALK`, `LOCAL_STT_HOLD_KEY`, `LOCAL_STT_HOLD_MIN_MS`, `LOCAL_STT_HOLD_DEVICES`.
+Environment equivalents: `LOCAL_STT_MODEL`, `LOCAL_STT_LANG`, `LOCAL_STT_DEVICE`, `LOCAL_STT_COMPUTE`, `LOCAL_STT_BEAM`, `LOCAL_STT_MAX_SECS`, `LOCAL_STT_AUTO_PASTE`, `LOCAL_STT_DICTATION_COMMANDS`, `LOCAL_STT_SILENCE_STOP`, `LOCAL_STT_SILENCE_MS`, `LOCAL_STT_VAD`, `LOCAL_STT_VOCAB`, `LOCAL_STT_CORRECTIONS`, `LOCAL_STT_OVERLAY`, `LOCAL_STT_OSD_BACKEND`, `LOCAL_STT_OSD_MARGIN`, `LOCAL_STT_PARTIAL`, `LOCAL_STT_PARTIAL_SECS`, `LOCAL_STT_WAKE_WORD`, `LOCAL_STT_WAKE_MODEL`, `LOCAL_STT_WAKE_THRESHOLD`, `LOCAL_STT_WAKE_ENGINE`, `LOCAL_STT_WAKE_PHRASE`, `LOCAL_STT_VOSK_MODEL`, `LOCAL_STT_PUSH_TO_TALK`, `LOCAL_STT_HOLD_KEY`, `LOCAL_STT_HOLD_MIN_MS`, `LOCAL_STT_HOLD_DEVICES`.
 
 ### Models & VRAM (RTX 5070 12GB)
 
@@ -438,7 +456,7 @@ Not implemented yet — documented so expectations are clear:
 | **CI (GitHub Actions)** | ✅ done | `.github/workflows/ci.yml` runs 4 jobs: tests (Python 3.11/3.13/3.14, slim deps), ruff, build (wheel + `python-installer`, same path as the AUR package) and audio (PortAudio, so recorder tests run). Heavy imports stay lazy. |
 | **AUR / PKGBUILD** | ✅ done | `packaging/aur/` ships a source PKGBUILD (AUR deps for the Python stack, cuBLAS 12 bundled from the PyPI wheel into `/usr/lib/local-stt/cublas`). Uninstall via `pacman -R local-stt`; `local-stt uninstall` stays user-level only. |
 | **Push-to-talk (hold key)** | ✅ done | `push_to_talk = true` + `python-evdev`: hold `Win+F` to record, release to transcribe. Opt-in because it needs read access to `/dev/input` (grupo `input`). See [Push-to-talk](#push-to-talk-hold-to-dictate). |
-| **Custom Spanish wake word** | ❌ | openWakeWord ships English-trained models ("hey jarvis", "alexa"…). A custom "oye computadora" requires training a model (synthetic TTS data + fine-tune). |
+| **Custom Spanish wake word** | ✅ via Vosk (opt-in) | `wake_word_engine = "vosk"` + `wake_word_phrase = "oye computadora"` (or `"dev paul"`) with the small Spanish/English Vosk model: local keyword spotting without training. openWakeWord still ships English phrases; a fully trained custom `.onnx` remains optional. |
 | **Wayland-native OSD** | ✅ KDE/wlroots, Tk on GNOME | `gtk4` + `python-gobject` + `gtk4-layer-shell`: floating indicator on the `overlay` layer, no XWayland and no focus stealing. GNOME/Mutter has no layer-shell, so it keeps the Tk/XWayland OSD. See [Live OSD](#live-osd-with-voice-level-and-partial-text). |
 | **Exact window detection on KDE** | partial | Requires `kdotool` (AUR). The built-in KWin DBus fallback works but is best-effort and slower (see *Contextual vocabulary*). |
 | **Multi-language output** | ❌ | Whisper's `task=translate` only translates **into English**. Dictating Spanish → English works; the reverse doesn't exist upstream. |

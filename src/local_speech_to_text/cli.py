@@ -241,22 +241,62 @@ def cmd_history(args):
 
 
 def cmd_wakeword(args):
-    """Estado del wake word: activo, modelo resuelto y modelos incluidos."""
-    from .wakeword import list_models, resolve_model_path
+    """Estado del wake word (openWakeWord o Vosk), modelos y descarga."""
+    from .wakeword import (
+        download_vosk_model,
+        find_vosk_model,
+        list_models,
+        resolve_model_path,
+        vosk_model_url,
+    )
 
     cfg = _config_from_args(args)
-    path = resolve_model_path(cfg.wake_word_model)
-    exists = path.endswith(".onnx") and Path(path).exists()
-    print(f"wake_word: {'on' if cfg.wake_word else 'off'} · modelo: {cfg.wake_word_model} "
-          f"· umbral: {cfg.wake_word_threshold}")
-    print(f"ruta: {path} {'(ok)' if exists else '(no encontrada)'}")
-    models = list_models()
-    if models:
-        print("incluidos: " + ", ".join(models))
+    engine = cfg.wake_word_engine
+    print(f"wake_word: {'on' if cfg.wake_word else 'off'} · motor: {engine}")
+
+    if getattr(args, "download_vosk", False):
+        lang = getattr(args, "vosk_lang", "en")
+        try:
+            name, _ = vosk_model_url(lang)
+            print(f"Descargando {name} (~40 MB)...")
+            path = download_vosk_model(lang)
+        except Exception as e:
+            print(f"❌ {e}")
+            sys.exit(1)
+        print(f"✅ Modelo Vosk en {path}")
+        print('Config: wake_word = true · wake_word_engine = "vosk" · '
+              'wake_word_phrase = "dev paul"')
+        return
+
+    ok = True
+    if engine == "vosk":
+        try:
+            import vosk  # noqa: F401
+
+            print("deps: vosk OK")
+        except ImportError:
+            print("deps: falta vosk (pip install 'local-speech-to-text[vosk]')")
+            ok = False
+        model = find_vosk_model(cfg.vosk_model_path)
+        print(f"frase: '{cfg.wake_word_phrase}'")
+        print(f"modelo: {model or '(no encontrado)'}")
+        if model is None:
+            print("  descarga: local-stt wakeword --download-vosk [--vosk-lang es]")
+            ok = False
     else:
-        print("openWakeWord no instalado o sin modelos (extra [wakeword])")
-    if cfg.wake_word and not exists:
-        print("⚠️  el modelo no existe: el wake word no arrancará")
+        path = resolve_model_path(cfg.wake_word_model)
+        exists = path.endswith(".onnx") and Path(path).exists()
+        print(f"modelo: {cfg.wake_word_model} · umbral: {cfg.wake_word_threshold}")
+        print(f"ruta: {path} {'(ok)' if exists else '(no encontrada)'}")
+        models = list_models()
+        if models:
+            print("incluidos: " + ", ".join(models))
+        else:
+            print("openWakeWord no instalado o sin modelos (extra [wakeword])")
+        ok = exists
+
+    if cfg.wake_word and not ok:
+        print("⚠️  el wake word no arrancará con esta configuración")
         if args.check:
             sys.exit(1)
     if args.check:
@@ -1125,6 +1165,10 @@ def main(argv: list[str] | None = None):
     wk = sub.add_parser("wakeword", help="Estado del wake word y modelos incluidos")
     wk.add_argument("--check", action="store_true",
                     help="exit 1 si está activo y el modelo no existe")
+    wk.add_argument("--download-vosk", action="store_true",
+                    help="Descarga un modelo Vosk pequeño (~40 MB) para frase propia")
+    wk.add_argument("--vosk-lang", choices=["en", "es"], default="en",
+                    help="Idioma del modelo Vosk a descargar (default en)")
     wk.set_defaults(func=cmd_wakeword)
 
     doc = sub.add_parser("doctor", help="Diagnóstico completo: GPU, daemon, atajo, micro...")

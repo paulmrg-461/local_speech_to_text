@@ -4,6 +4,16 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/).
 El proyecto sigue [SemVer](https://semver.org/lang/es/) de forma pragmática:
 0.x = API de CLI/config todavía puede cambiar.
 
+## [Unreleased]
+
+### Añadido
+- `local-stt wakeword`: modelo activo, ruta resuelta (nombre o `.onnx`
+  custom), modelos incluidos y `--check` para scripts.
+- **Wake word con frase propia sin entrenar**: motor Vosk
+  (`wake_word_engine = "vosk"`, `wake_word_phrase = "dev paul"`,
+  `--download-vosk`, `wake_word_phrase = "oye computadora"` en español). CPU,
+  gramática limitada a la frase; opt-in con extra `[vosk]`.
+
 ## [0.3.0] - 2026-11-19
 
 ### Añadido

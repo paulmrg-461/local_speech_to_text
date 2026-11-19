@@ -10,11 +10,86 @@ Dependencias opcionales: pip install local-speech-to-text[wakeword]
 
 from __future__ import annotations
 
+import json
+import os
 import queue
+import shutil
+import tempfile
 import threading
+import urllib.request
+import zipfile
 from pathlib import Path
 
 _CHUNK = 1280  # 80ms a 16kHz
+
+
+def normalize_phrase(text: str) -> str:
+    """'DevPaul, ¡oye!' -> 'devpaul oye' (minúsculas, sin puntuación)."""
+    cleaned = "".join(c if (c.isalnum() or c.isspace()) else " " for c in (text or "").lower())
+    return " ".join(cleaned.split())
+
+
+def phrase_in_text(phrase: str, text: str) -> bool:
+    """True si la frase aparece como palabras completas (no substring)."""
+    p = normalize_phrase(phrase)
+    t = normalize_phrase(text)
+    return bool(p) and f" {p} " in f" {t} "
+
+
+# Vosk: keyword spotting por gramática, sin entrenar modelo (CPU).
+VOSK_MODELS = {
+    "en": "vosk-model-small-en-us-0.15",
+    "es": "vosk-model-small-es-0.42",
+}
+VOSK_URL = "https://alphacephei.com/vosk/models/{name}.zip"
+
+
+def vosk_model_url(lang: str) -> tuple[str, str]:
+    """(nombre, url) del modelo Vosk pequeño para 'en' o 'es'."""
+    key = (lang or "en").lower()
+    if key not in VOSK_MODELS:
+        raise ValueError(f"idioma Vosk no soportado: {lang} (usa en o es)")
+    name = VOSK_MODELS[key]
+    return name, VOSK_URL.format(name=name)
+
+
+def vosk_base_dir() -> Path:
+    base = os.environ.get("XDG_DATA_HOME", "~/.local/share")
+    return Path(base).expanduser() / "local-stt"
+
+
+def find_vosk_model(path: str = "") -> Path | None:
+    """Directorio del modelo Vosk explícito o el primero instalado."""
+    if path:
+        candidate = Path(path).expanduser()
+        return candidate if candidate.is_dir() else None
+    base = vosk_base_dir()
+    if not base.is_dir():
+        return None
+    return next((p for p in sorted(base.glob("vosk-model-*")) if p.is_dir()), None)
+
+
+def download_vosk_model(lang: str = "en", dest_dir: Path | None = None) -> Path:
+    """Descarga y descomprime el modelo Vosk (~40 MB). Idempotente."""
+    name, url = vosk_model_url(lang)
+    base = dest_dir or vosk_base_dir()
+    target = base / name
+    if target.is_dir():
+        return target
+    base.mkdir(parents=True, exist_ok=True)
+    zip_path = None
+    try:
+        with urllib.request.urlopen(url, timeout=120) as resp:
+            with tempfile.NamedTemporaryFile(suffix=".zip", delete=False) as tmp:
+                zip_path = Path(tmp.name)
+                shutil.copyfileobj(resp, tmp)
+        with zipfile.ZipFile(zip_path) as zf:
+            zf.extractall(base)
+    finally:
+        if zip_path is not None:
+            zip_path.unlink(missing_ok=True)
+    return target
+
 
 
 def resolve_model_path(name: str) -> str:
@@ -134,6 +209,109 @@ class WakeWordMonitor:
         """Reanuda tras un dictado; pequeño margen anti eco."""
         if self._model is not None:
             self._model.reset()
+        self._muted.clear()
+
+    def stop(self) -> None:
+        self._stop_flag.set()
+        if self._thread:
+            self._thread.join(timeout=1.0)
+            self._thread = None
+
+
+class VoskMonitor:
+    """Keyword spotting local con Vosk: detecta la frase sin modelo entrenado.
+
+    Misma interfaz que WakeWordMonitor (start/pause/resume/stop) para que el
+    daemon no distinga motor. Pensado para frases propias ("dev paul",
+    "oye computadora"); la gramática limita el decoder a la frase + [unk].
+    """
+
+    def __init__(self, on_wake, model_path: str, phrase: str = "dev paul", sample_rate: int = 16000):
+        self._on_wake = on_wake
+        self._model_path = str(model_path)
+        self._phrase = normalize_phrase(phrase) or "dev paul"
+        self._sample_rate = sample_rate
+        self._muted = threading.Event()
+        self._stop_flag = threading.Event()
+        self._queue: queue.Queue = queue.Queue()
+        self._thread: threading.Thread | None = None
+        self._stream = None
+        self._rec = None
+
+    def _load_model(self) -> None:
+        if not Path(self._model_path).is_dir():
+            raise RuntimeError(
+                f"modelo Vosk no encontrado en {self._model_path}. "
+                "Descárgalo con: local-stt wakeword --download-vosk"
+            )
+        import vosk
+
+        if hasattr(vosk, "SetLogLevel"):
+            vosk.SetLogLevel(-1)  # sin el ruido de logs de Kaldi
+        model = vosk.Model(self._model_path)
+        grammar = json.dumps([self._phrase, "[unk]"])
+        self._rec = vosk.KaldiRecognizer(model, self._sample_rate, grammar)
+
+    def _handle_text(self, text: str) -> bool:
+        """True si el texto contiene la frase y no estamos silenciados."""
+        if self._muted.is_set() or not phrase_in_text(self._phrase, text):
+            return False
+        print(f"[wakeword] frase detectada: '{self._phrase}'")
+        self._muted.set()  # evita re-disparos hasta resume()
+        self._on_wake()
+        return True
+
+    def _loop(self) -> None:
+        import sounddevice as sd
+
+        def _callback(indata, frames, time_info, status):  # noqa: ANN001
+            self._queue.put(indata.copy())
+
+        self._stream = sd.InputStream(
+            samplerate=self._sample_rate, channels=1, dtype="int16",
+            blocksize=_CHUNK, callback=_callback,
+        )
+        self._stream.start()
+        print(f"[wakeword] escuchando (vosk): '{self._phrase}'")
+        while not self._stop_flag.is_set():
+            try:
+                chunk = self._queue.get(timeout=0.2)
+            except queue.Empty:
+                continue
+            if self._muted.is_set():
+                continue
+            data = chunk.tobytes()
+            if self._rec.AcceptWaveform(data):
+                self._handle_text(json.loads(self._rec.Result()).get("text", ""))
+            else:
+                self._handle_text(json.loads(self._rec.PartialResult()).get("partial", ""))
+        try:
+            self._stream.stop()
+            self._stream.close()
+        except Exception:
+            pass
+
+    def start(self) -> bool:
+        try:
+            self._load_model()
+        except Exception as e:
+            print(f"[wakeword] vosk no disponible: {e}")
+            return False
+        self._stop_flag.clear()
+        self._muted.clear()
+        self._thread = threading.Thread(target=self._loop, daemon=True)
+        self._thread.start()
+        return True
+
+    def pause(self) -> None:
+        self._muted.set()
+
+    def resume(self) -> None:
+        if self._rec is not None:
+            try:
+                self._rec.Reset()
+            except Exception:
+                pass
         self._muted.clear()
 
     def stop(self) -> None:

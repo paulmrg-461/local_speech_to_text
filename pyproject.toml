@@ -26,6 +26,8 @@ dev = ["pytest>=8.0"]
 wakeword = ["openwakeword>=0.6", "onnxruntime>=1.18"]
 # Push-to-talk: mantener la tecla graba y soltarla transcribe (release real)
 hold = ["evdev>=1.7"]
+# Wake word con frase propia ("DevPaul", "oye computadora") sin entrenar modelo
+vosk = ["vosk>=0.3.45"]
 
 [project.scripts]
 local-stt = "local_speech_to_text.cli:main"

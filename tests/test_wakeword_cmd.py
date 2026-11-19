@@ -83,4 +83,4 @@ def test_wakeword_activo_sin_modelo_check_falla(monkeypatch, capsys):
         cli.cmd_wakeword(args)
 
     assert exc.value.code == 1
-    assert "no existe" in capsys.readouterr().out
+    assert "no arrancará" in capsys.readouterr().out
