@@ -714,7 +714,7 @@ def cmd_doctor(args):
     from .clipboard import notify  # noqa: F401
 
     cfg = _config_from_args(args)
-    print(f"== local-stt doctor | modelo={cfg.model} device={cfg.device} ==")
+    print(f"== local-stt doctor | v{_version()} | modelo={cfg.model} device={cfg.device} ==")
     failures = 0
 
     # 1. Driver/GPU
@@ -915,13 +915,24 @@ def cmd_transcribe_file(args):
         print("\n(copiado al portapapeles)")
 
 
-def main():
+def _version() -> str:
+    """Versión instalada (metadatos del paquete); fallback si no hay metadata."""
+    try:
+        from importlib.metadata import version
+
+        return version("local-speech-to-text")
+    except Exception:
+        return "desconocida"
+
+
+def main(argv: list[str] | None = None):
     try:  # salida en orden en pipes/redirecciones (CLI interactivo)
         sys.stdout.reconfigure(line_buffering=True)
         sys.stderr.reconfigure(line_buffering=True)
     except Exception:
         pass
     p = argparse.ArgumentParser(prog="local-stt", description="Dictado local RTX 5070: Win+F -> copiar -> Ctrl+V")
+    p.add_argument("--version", "-V", action="version", version=f"local-stt {_version()}")
     p.add_argument("--model", default=None, help="Modelo faster-whisper (default: large-v3-turbo)")
     p.add_argument("--lang", default="es", help="Idioma: es, en, auto (default: es)")
     p.add_argument("--device", default=None, choices=["cuda", "cpu"], help="cuda o cpu")
@@ -1014,7 +1025,7 @@ def main():
     f.add_argument("--copy", action="store_true", help="Copiar al portapapeles")
     f.set_defaults(func=cmd_transcribe_file)
 
-    args = p.parse_args()
+    args = p.parse_args(argv)
     args.func(args)
 
 
