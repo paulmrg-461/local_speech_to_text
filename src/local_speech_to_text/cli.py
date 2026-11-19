@@ -137,7 +137,8 @@ def cmd_osd(args):
         print("GTK4 + gtk4-layer-shell:", "sí" if available else "no")
         if not available:
             print("  sudo pacman -S --needed gtk4 python-gobject gtk4-layer-shell")
-    print(f"overlay: {'on' if cfg.overlay else 'off'} · margen: {cfg.osd_margin_top}px")
+    print(f"overlay: {'on' if cfg.overlay else 'off'} · margen: {cfg.osd_margin_top}px "
+          f"· monitor: {cfg.osd_monitor or 'auto'}")
     if getattr(args, "preview", False):
         if backend == "gtk" and not available:
             print("No puedo previsualizar GTK: instala las dependencias de arriba.")
@@ -149,6 +150,8 @@ def cmd_osd(args):
                 str(Path(__file__).with_name("osd_gtk.py")),
                 "--preview", "--seconds", str(seconds),
             ]
+            if cfg.osd_monitor:
+                argv += ["--monitor", cfg.osd_monitor]
         else:
             argv = [
                 sys.executable, "-m", "local_speech_to_text.osd",
@@ -182,17 +185,47 @@ def cmd_devices(args):
     print(AudioRecorder.list_devices())
 
 
+def _reprocess_history(cfg, entries: list[dict]) -> None:
+    """Reaplica la config actual (puntuación, correcciones, números) al historial."""
+    from .text_cleaner import clean_text, numbers_to_digits
+    from .vocab import apply_corrections, load_corrections
+
+    corrections = load_corrections(cfg.corrections_file)
+    changed = 0
+    out = []
+    for entry in entries:
+        original = entry.get("text", "")
+        text = clean_text(original) if cfg.dictation_commands else original
+        if corrections:
+            text = apply_corrections(text, corrections)
+        if cfg.numbers_to_digits:
+            text = numbers_to_digits(text)
+        changed += text != original
+        out.append({**entry, "text": text})
+    if not changed:
+        print(f"Nada que reprocesar ({len(entries)} entradas).")
+        return
+    path = cfg.history_path
+    backup = path.with_name(path.name + ".bak")
+    shutil.copy2(path, backup)
+    path.write_text("\n".join(json.dumps(e, ensure_ascii=False) for e in out) + "\n")
+    print(f"✅ {changed}/{len(entries)} entradas reprocesadas. Backup: {backup}")
+
+
 def cmd_history(args):
     """Muestra las últimas transcripciones. `--copy N` copia la N-ésima (1=última)."""
     cfg = _config_from_args(args)
     if not cfg.history_path.exists():
         print("Sin historial todavía. Dicta algo primero (Win+F).")
         return
-    entries = [json.loads(ln) for ln in cfg.history_path.read_text().splitlines() if ln.strip()]
-    if not entries:
+    all_entries = [json.loads(ln) for ln in cfg.history_path.read_text().splitlines() if ln.strip()]
+    if not all_entries:
         print("Historial vacío.")
         return
-    entries = entries[-args.count:]
+    if getattr(args, "reprocess", False):
+        _reprocess_history(cfg, all_entries)
+        return
+    entries = all_entries[-args.count:]
     if args.copy:
         idx = args.copy if args.copy > 0 else 1
         if idx > len(entries):
@@ -1053,6 +1086,8 @@ def main(argv: list[str] | None = None):
     h.add_argument("--count", "-n", type=int, default=10, help="Cuántas mostrar (default 10)")
     h.add_argument("--copy", type=int, nargs="?", const=1, metavar="N",
                    help="Copiar al portapapeles la N-ésima (1=última). Solo: copia la última")
+    h.add_argument("--reprocess", action="store_true",
+                   help="Reaplica puntuación/correcciones/números de la config actual")
     h.set_defaults(func=cmd_history)
 
     pk = sub.add_parser("pick", help="Selector visual (wofi/rofi) del historial → copia y pega")

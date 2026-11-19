@@ -49,9 +49,20 @@ class WakeWordMonitor:
         self._model = None
 
     def _load_model(self):
+        import warnings
+
         from openwakeword.model import Model
 
-        self._model = Model(wakeword_model_paths=[self._model_path])
+        with warnings.catch_warnings():
+            # openWakeWord pide CUDAExecutionProvider por defecto; el wheel de
+            # onnxruntime de Arch es CPU y avisa en cada arranque. El wake word
+            # corre en CPU por diseño, así que se silencia ese aviso concreto.
+            warnings.filterwarnings(
+                "ignore",
+                message=r"Specified provider 'CUDAExecutionProvider'.*",
+                category=UserWarning,
+            )
+            self._model = Model(wakeword_model_paths=[self._model_path])
         self._model_name = list(self._model.models.keys())[0]
 
     def _loop(self) -> None:

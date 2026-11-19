@@ -88,7 +88,8 @@ def test_osd_preview_tk_ejecuta_el_modulo(monkeypatch, capsys):
 
 
 def test_osd_preview_gtk_usa_el_script(monkeypatch):
-    _cfg(monkeypatch)
+    cfg = _cfg(monkeypatch)
+    object.__setattr__(cfg, "osd_monitor", "HDMI-A-1")
     monkeypatch.setattr(osd_backend, "select_backend", lambda forced="auto", **kw: ("gtk", "wayland"))
     monkeypatch.setattr(osd_backend, "find_system_python", lambda: "/usr/bin/python3")
     monkeypatch.setattr(osd_backend, "gtk_layer_available", lambda **kw: True)
@@ -104,6 +105,7 @@ def test_osd_preview_gtk_usa_el_script(monkeypatch):
     assert launched["argv"][0] == "/usr/bin/python3"
     assert launched["argv"][1].endswith("osd_gtk.py")
     assert "--preview" in launched["argv"]
+    assert launched["argv"][-2:] == ["--monitor", "HDMI-A-1"]
     assert launched["kw"]["env"]["LD_PRELOAD"] == "libls.so"
 
 

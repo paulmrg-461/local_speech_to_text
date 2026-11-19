@@ -265,7 +265,10 @@ class Daemon:
             python = find_system_python()
             script = Path(__file__).with_name("osd_gtk.py")
             if python and script.exists():
-                return [python, str(script), sock, "--margin", str(self.config.osd_margin_top)], "gtk"
+                argv = [python, str(script), sock, "--margin", str(self.config.osd_margin_top)]
+                if self.config.osd_monitor:
+                    argv += ["--monitor", self.config.osd_monitor]
+                return argv, "gtk"
             print("[daemon] sin python del sistema con GTK: OSD en Tk")
         return [
             sys.executable, "-m", "local_speech_to_text.osd", sock,

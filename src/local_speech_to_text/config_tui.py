@@ -32,6 +32,7 @@ _MENU = [
     ("overlay", "OSD flotante", "bool", None),
     ("osd_backend", "OSD backend", "choice", ["auto", "gtk", "tk"]),
     ("osd_margin_top", "OSD margen superior (px)", "int", None),
+    ("osd_monitor", "OSD monitor (nombre/índice, vacío=auto)", "str", None),
     ("partial_results", "Texto parcial en vivo", "bool", None),
     ("numbers_to_digits", "Números hablados a dígitos", "bool", None),
     ("streaming", "Streaming (dictados largos)", "bool", None),

@@ -206,6 +206,7 @@ sudo pacman -S --needed wtype        # sends Ctrl+V on KDE/GNOME Wayland
 | `local-stt devices` | Lists microphones (pick the default in `pavucontrol` → Input) |
 | `local-stt history` | Shows the last 10 transcriptions |
 | `local-stt history --copy 2` | Copies the second-to-last one (`--copy` alone = the latest) |
+| `local-stt history --reprocess` | Re-applies the current punctuation/corrections/numbers config to saved entries (keeps a `.bak`) |
 | `local-stt pick` | Visual picker (wofi/rofi) of the last 20 dictations; Enter copies & pastes the chosen one |
 | `local-stt download` | Pre-downloads the model (first use becomes instant) |
 | `local-stt reload` | Re-reads config (TOML + env) without restarting the daemon |
@@ -339,6 +340,7 @@ silence_threshold_ms = 1500
 overlay = true             # floating OSD while recording
 osd_backend = "auto"       # auto | gtk (layer-shell) | tk (XWayland)
 osd_margin_top = 80        # distance from the top edge
+osd_monitor = ""           # GTK: monitor name substring or index; "" = compositor picks
 partial_results = true     # live partial transcription in the OSD
 partial_interval = 1.5     # seconds between partials
 # push_to_talk = true      # hold the key to dictate (needs python-evdev, see below)
@@ -438,9 +440,9 @@ Not implemented yet — documented so expectations are clear:
 | **Exact window detection on KDE** | partial | Requires `kdotool` (AUR). The built-in KWin DBus fallback works but is best-effort and slower (see *Contextual vocabulary*). |
 | **Multi-language output** | ❌ | Whisper's `task=translate` only translates **into English**. Dictating Spanish → English works; the reverse doesn't exist upstream. |
 
-Also note: `local-stt history` and `pick` show the *raw* saved text; entries
-saved before a config change (e.g. enabling `numbers_to_digits`) are not
-re-processed.
+Also note: `local-stt history` and `pick` show the *raw* saved text; run
+`local-stt history --reprocess` to re-apply the current config (it writes a
+`.bak` first).
 
 ---
 

@@ -73,12 +73,13 @@ def check() -> bool:
         return False
 
 
-def parse_args(argv: list[str]) -> tuple[str, int, float | None]:
-    """(socket, margen, segundos de preview) desde argv; `--check` va antes."""
+def parse_args(argv: list[str]) -> tuple[str, int, float | None, str]:
+    """(socket, margen, segundos de preview, monitor) desde argv."""
     args = [a for a in argv if a != "--check"]
     sock = DEFAULT_SOCK
     margin = DEFAULT_MARGIN
     preview: float | None = None
+    monitor = ""
     if "--preview" in args:
         preview = DEFAULT_PREVIEW
         args.remove("--preview")
@@ -90,13 +91,32 @@ def parse_args(argv: list[str]) -> tuple[str, int, float | None]:
         idx = args.index("--margin")
         margin = int(args[idx + 1])
         del args[idx:idx + 2]
+    if "--monitor" in args:
+        idx = args.index("--monitor")
+        monitor = args[idx + 1]
+        del args[idx:idx + 2]
     rest = [a for a in args if not a.startswith("--")]
     if rest:
         sock = rest[0]
-    return sock, margin, preview
+    return sock, margin, preview, monitor
 
 
-def run(sock: str, margin: int = DEFAULT_MARGIN, preview: float | None = None) -> None:
+def match_monitor(spec: str, names: list[str]) -> int | None:
+    """Índice del monitor: número exacto primero, luego substring del modelo."""
+    spec = (spec or "").strip().lower()
+    if not spec:
+        return None
+    if spec.isdigit() and int(spec) < len(names):
+        return int(spec)
+    for idx, name in enumerate(names):
+        model = (name or "").lower()
+        if model and spec in model:
+            return idx
+    return None
+
+
+def run(sock: str, margin: int = DEFAULT_MARGIN, preview: float | None = None,
+        monitor: str = "") -> None:
     """Ventana layer-shell que se refresca a 10 Hz hasta que pare la grabación."""
     import gi
 
@@ -124,6 +144,18 @@ def run(sock: str, margin: int = DEFAULT_MARGIN, preview: float | None = None) -
         Gtk4LayerShell.init_for_window(win)
         Gtk4LayerShell.set_namespace(win, "local-stt")
         Gtk4LayerShell.set_layer(win, Gtk4LayerShell.Layer.OVERLAY)
+        if monitor:
+            monitors = Gdk.Display.get_default().get_monitors()
+            names = [
+                (monitors.get_item(i).get_model() or "")
+                for i in range(monitors.get_n_items())
+            ]
+            idx = match_monitor(monitor, names)
+            if idx is not None:
+                Gtk4LayerShell.set_monitor(win, monitors.get_item(idx))
+                print(f"[osd] monitor {idx}: {names[idx] or '?'}")
+            else:
+                print(f"[osd] monitor '{monitor}' no encontrado; uso el del compositor")
         for edge in (Gtk4LayerShell.Edge.TOP, Gtk4LayerShell.Edge.LEFT, Gtk4LayerShell.Edge.RIGHT):
             Gtk4LayerShell.set_anchor(win, edge, True)
         Gtk4LayerShell.set_margin(win, Gtk4LayerShell.Edge.TOP, margin)
@@ -198,9 +230,9 @@ def main(argv: list[str] | None = None) -> None:
     argv = list(sys.argv[1:] if argv is None else argv)
     if "--check" in argv:
         raise SystemExit(0 if check() else 3)
-    sock, margin, preview = parse_args(argv)
+    sock, margin, preview, monitor = parse_args(argv)
     try:
-        run(sock, margin, preview)
+        run(sock, margin, preview, monitor)
     except Exception as e:  # sin display, typelib roto, compositor sin layer-shell
         print(f"[osd] GTK no disponible: {e}", file=sys.stderr)
         raise SystemExit(2) from e

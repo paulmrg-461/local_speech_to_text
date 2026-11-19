@@ -63,6 +63,17 @@ def test_argv_gtk_con_python_del_sistema(monkeypatch):
     assert argv[-2:] == ["--margin", "120"]
 
 
+def test_argv_gtk_incluye_monitor(monkeypatch):
+    d = _daemon(monkeypatch)
+    object.__setattr__(d.config, "osd_monitor", "HDMI-A-1")
+    monkeypatch.setattr(osd_backend, "select_backend", lambda forced="auto", **kw: ("gtk", "wayland"))
+    monkeypatch.setattr(osd_backend, "find_system_python", lambda: "/usr/bin/python3")
+
+    argv, _ = d._osd_argv()
+
+    assert argv[-2:] == ["--monitor", "HDMI-A-1"]
+
+
 def test_argv_tk_si_select_dice_tk(monkeypatch):
     d = _daemon(monkeypatch, backend="tk")
     monkeypatch.setattr(osd_backend, "select_backend", lambda forced="auto", **kw: ("tk", "x11"))
@@ -201,24 +212,28 @@ def test_osd_env_sin_hold(monkeypatch):
 
 
 def test_config_osd_defaults_y_env(monkeypatch, tmp_path):
-    for var in ("LOCAL_STT_OSD_BACKEND", "LOCAL_STT_OSD_MARGIN"):
+    for var in ("LOCAL_STT_OSD_BACKEND", "LOCAL_STT_OSD_MARGIN", "LOCAL_STT_OSD_MONITOR"):
         monkeypatch.delenv(var, raising=False)
     cfg = Config.load(config_file=tmp_path / "no.toml")
     assert cfg.osd_backend == "auto"
     assert cfg.osd_margin_top == 80
+    assert cfg.osd_monitor == ""
 
     monkeypatch.setenv("LOCAL_STT_OSD_BACKEND", "gtk")
     monkeypatch.setenv("LOCAL_STT_OSD_MARGIN", "140")
+    monkeypatch.setenv("LOCAL_STT_OSD_MONITOR", "DP-1")
     cfg = Config.load(config_file=tmp_path / "no.toml")
     assert cfg.osd_backend == "gtk"
     assert cfg.osd_margin_top == 140
+    assert cfg.osd_monitor == "DP-1"
 
 
 def test_config_osd_toml_y_margen_negativo(monkeypatch, tmp_path):
-    for var in ("LOCAL_STT_OSD_BACKEND", "LOCAL_STT_OSD_MARGIN"):
+    for var in ("LOCAL_STT_OSD_BACKEND", "LOCAL_STT_OSD_MARGIN", "LOCAL_STT_OSD_MONITOR"):
         monkeypatch.delenv(var, raising=False)
     cfg_file = tmp_path / "config.toml"
-    cfg_file.write_text('osd_backend = "tk"\nosd_margin_top = -20\n')
+    cfg_file.write_text('osd_backend = "tk"\nosd_margin_top = -20\nosd_monitor = "HDMI-A-1"\n')
     cfg = Config.load(config_file=cfg_file)
     assert cfg.osd_backend == "tk"
     assert cfg.osd_margin_top == 0
+    assert cfg.osd_monitor == "HDMI-A-1"

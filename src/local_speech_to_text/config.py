@@ -60,6 +60,7 @@ _ENV_MAP = {
     # OSD (indicador flotante)
     "osd_backend": "LOCAL_STT_OSD_BACKEND",
     "osd_margin_top": "LOCAL_STT_OSD_MARGIN",
+    "osd_monitor": "LOCAL_STT_OSD_MONITOR",
 }
 
 _DEFAULTS = {
@@ -95,6 +96,7 @@ _DEFAULTS = {
     # OSD: auto = GTK+layer-shell si hay Wayland, si no Tk (XWayland)
     "osd_backend": "auto",
     "osd_margin_top": 80,
+    "osd_monitor": "",  # nombre/índice del monitor (GTK); vacío = compositor
 }
 
 # Paths por defecto de vocabulario/correcciones (XDG)
@@ -153,6 +155,7 @@ class Config:
     # OSD: auto = GTK+layer-shell en Wayland; tk = XWayland
     osd_backend: str = "auto"
     osd_margin_top: int = 80
+    osd_monitor: str = ""  # nombre o índice (GTK); vacío = decide el compositor
     # {regex de ventana: archivo de vocabulario} — vocabulario contextual por app
     app_vocab: dict[str, str] = field(default_factory=dict)
     vocabulary_file: Path = _default_vocab_path()
@@ -189,7 +192,7 @@ class Config:
             data["osd_margin_top"] = max(0, int(data.get("osd_margin_top", 80)))
         except (TypeError, ValueError):
             data["osd_margin_top"] = 80
-        for key in ("hold_key", "osd_backend"):
+        for key in ("hold_key", "osd_backend", "osd_monitor"):
             if data.get(key) is not None:
                 data[key] = str(data[key])
         if data.get("osd_backend") not in ("auto", "gtk", "tk"):
@@ -199,7 +202,8 @@ class Config:
 
 # Claves de texto plano (evita que caigan en la rama bool del parser de env)
 _STR_KEYS = {
-    "language", "model", "device", "compute_type", "mic", "wake_word_model", "hold_key", "osd_backend",
+    "language", "model", "device", "compute_type", "mic", "wake_word_model",
+    "hold_key", "osd_backend", "osd_monitor",
 }
 
 

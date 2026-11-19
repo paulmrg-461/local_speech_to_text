@@ -14,21 +14,35 @@ def test_import_sin_gi():
 
 
 def test_parse_args_defaults():
-    assert osd_gtk.parse_args([]) == ("/tmp/local-stt.sock", 80, None)
+    assert osd_gtk.parse_args([]) == ("/tmp/local-stt.sock", 80, None, "")
 
 
 def test_parse_args_socket_y_margen():
-    sock, margin, preview = osd_gtk.parse_args(["/tmp/x.sock", "--margin", "120"])
+    sock, margin, preview, monitor = osd_gtk.parse_args(["/tmp/x.sock", "--margin", "120"])
     assert sock == "/tmp/x.sock"
     assert margin == 120
     assert preview is None
+    assert monitor == ""
 
 
 def test_parse_args_preview():
-    assert osd_gtk.parse_args(["--preview"]) == ("/tmp/local-stt.sock", 80, 6.0)
-    sock, _, preview = osd_gtk.parse_args(["--preview", "--seconds", "2.5"])
+    assert osd_gtk.parse_args(["--preview"]) == ("/tmp/local-stt.sock", 80, 6.0, "")
+    sock, _, preview, _ = osd_gtk.parse_args(["--preview", "--seconds", "2.5"])
     assert sock == "/tmp/local-stt.sock"
     assert preview == 2.5
+
+
+def test_parse_args_monitor():
+    assert osd_gtk.parse_args(["--monitor", "HDMI-1"]) == ("/tmp/local-stt.sock", 80, None, "HDMI-1")
+
+
+def test_match_monitor_por_indice_y_nombre():
+    names = ["eDP-1", "HDMI-A-1", "DP-2"]
+    assert osd_gtk.match_monitor("1", names) == 1
+    assert osd_gtk.match_monitor("hdmi", names) == 1
+    assert osd_gtk.match_monitor("DP-2", names) == 2
+    assert osd_gtk.match_monitor("VGA", names) is None
+    assert osd_gtk.match_monitor("", names) is None
 
 
 def test_parse_args_ignora_check():
