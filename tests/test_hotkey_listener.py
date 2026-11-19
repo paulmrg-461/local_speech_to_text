@@ -277,6 +277,7 @@ def test_reload_reinicia_listener_al_cambiar_hold(monkeypatch):
 
     d, _ = _daemon_stub(monkeypatch)
     d._start_hold_listener()
+    d._osd_choice = ("gtk", "cacheado")
     old_listener = d.hold_listener
     assert old_listener is not None
 
@@ -289,3 +290,4 @@ def test_reload_reinicia_listener_al_cambiar_hold(monkeypatch):
     assert d.hold_listener is not None
     assert d.hold_listener is not old_listener  # reiniciado con la config nueva
     assert d.hold_listener.machine.min_ms == 350
+    assert d._osd_choice is None  # el backend se re-sondea al próximo dictado

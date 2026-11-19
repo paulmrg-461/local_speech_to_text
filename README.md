@@ -120,6 +120,7 @@ auto-pasted with `Ctrl+V` where your cursor was.
 | **`local-stt translate`** | Toggle: dictate in your language, the output is pasted in English |
 | **`local-stt config`** | Interactive menu for every setting (Enter keeps each value) |
 | **`local-stt keyboards`** | Lists readable keyboards and marks which ones your `hold_devices` allowlist matches |
+| **`local-stt osd`** | Shows the OSD backend (GTK layer-shell or Tk), why it was chosen and how to enable the native one (`--check` for scripts) |
 | **`local-stt reload`** | Applies config changes instantly (no restart, no VRAM loss) |
 | **`local-stt doctor`** | Diagnoses GPU, CUDA, daemon, hotkeys, clipboard tools, mic |
 

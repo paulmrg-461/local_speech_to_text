@@ -10,7 +10,7 @@ from __future__ import annotations
 import sys
 import time
 
-from .osd_backend import query_level
+from .osd_backend import bar_fraction, format_status, query_level, should_exit
 
 __all__ = ["Overlay", "query_level", "main"]
 
@@ -50,17 +50,14 @@ class Overlay:
 
     def _tick(self) -> None:
         info = query_level(self.sock_path)
-        if info is None or not info.get("recording"):
+        if should_exit(info):
             self.root.destroy()
             return
-        frac = min(1.0, info.get("rms", 0.0) / self.BAR_MAX)
-        w = int(frac * (self.W - 40))
-        self.bar_cv.itemconfigure(self.bar, width=w)
-        color = "#00c853" if info.get("rms", 0) >= 0.008 else "#5c6bc0"
+        rms = info.get("rms", 0.0)
+        self.bar_cv.itemconfigure(self.bar, width=int(bar_fraction(rms, self.BAR_MAX) * (self.W - 40)))
+        color = "#00c853" if rms >= 0.008 else "#5c6bc0"
         self.bar_cv.itemconfigure(self.bar, fill=color)
-        secs = info.get("elapsed", 0)
-        partial = (info.get("partial") or "").replace("\n", " ")
-        self.status.configure(text=f"[{secs:4.0f}s]  {partial[-90:]}")
+        self.status.configure(text=format_status(info))
         self.root.after(100, self._tick)
 
     def run(self) -> None:

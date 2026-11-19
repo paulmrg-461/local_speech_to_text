@@ -112,6 +112,25 @@ def cmd_status(args):
     print(resp)
 
 
+def cmd_osd(args):
+    """Estado del OSD: backend elegido, disponibilidad y cómo habilitarlo."""
+    from .osd_backend import describe, find_system_python, gtk_layer_available, select_backend
+
+    cfg = _config_from_args(args)
+    backend, reason = select_backend(cfg.osd_backend)
+    print(f"OSD: {describe(backend, reason)}")
+    print(f"python del sistema: {find_system_python() or 'no encontrado'}")
+    available = True
+    if backend == "gtk":
+        available = gtk_layer_available()
+        print("GTK4 + gtk4-layer-shell:", "sí" if available else "no")
+        if not available:
+            print("  sudo pacman -S --needed gtk4 python-gobject gtk4-layer-shell")
+    print(f"overlay: {'on' if cfg.overlay else 'off'} · margen: {cfg.osd_margin_top}px")
+    if getattr(args, "check", False):
+        sys.exit(0 if available else 1)
+
+
 def cmd_stop(args):
     resp = send_command("quit", _config_from_args(args).socket_path)
     print(resp)
@@ -959,6 +978,11 @@ def main(argv: list[str] | None = None):
 
     s = sub.add_parser("status", help="Estado del daemon")
     s.set_defaults(func=cmd_status)
+
+    osd = sub.add_parser("osd", help="Estado del OSD (backend, dependencias y margen)")
+    osd.add_argument("--check", action="store_true",
+                     help="exit 1 si el backend configurado no puede arrancar")
+    osd.set_defaults(func=cmd_osd)
 
     q = sub.add_parser("stop", help="Detiene el daemon")
     q.set_defaults(func=cmd_stop)
