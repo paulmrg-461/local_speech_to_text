@@ -345,6 +345,62 @@ def _hold_ready(cfg) -> tuple[bool, str]:
     return True, device
 
 
+def _list_keyboards() -> list[tuple[str, str]]:
+    """[(nombre, path)] de teclados legibles (EV_KEY + KEY_F). Requiere evdev.
+
+    Lanza ImportError sin `python-evdev` y PermissionError si hay devices pero
+    ninguno se puede abrir (falta el grupo `input`).
+    """
+    import glob
+
+    import evdev
+    from evdev import ecodes
+
+    boards: list[tuple[str, str]] = []
+    denied = False
+    for path in sorted(glob.glob("/dev/input/event*")):
+        try:
+            dev = evdev.InputDevice(path, readonly=True)
+        except PermissionError:
+            denied = True
+            continue
+        except Exception:
+            continue
+        try:
+            if ecodes.KEY_F in dev.capabilities().get(ecodes.EV_KEY, []):
+                boards.append((dev.name or "?", path))
+        finally:
+            dev.close()
+    if not boards and denied:
+        raise PermissionError("sin permiso para /dev/input/event*")
+    return boards
+
+
+def cmd_keyboards(args):
+    """Lista teclados y si coinciden con `hold_devices` (push-to-talk)."""
+    from .hotkey_hold import device_matches
+
+    cfg = _config_from_args(args)
+    try:
+        boards = _list_keyboards()
+    except ImportError:
+        print("Falta python-evdev: .venv/bin/pip install 'local-speech-to-text[hold]'")
+        sys.exit(1)
+    except PermissionError:
+        print(INPUT_GROUP_HINT)
+        sys.exit(1)
+    if not boards:
+        print("No se encontró ningún teclado legible en /dev/input/event*.")
+        sys.exit(1)
+    allow = cfg.hold_devices
+    print(f"Teclados legibles ({len(boards)}) · allowlist: "
+          f"{', '.join(allow) if allow else 'vacía (se escuchan todos)'}")
+    for name, path in boards:
+        mark = "✅" if device_matches(name, allow) else "  "
+        print(f"  {mark} {name}  [{path}]")
+    print("\nCopia el nombre (o un trozo) en hold_devices dentro de config.toml.")
+
+
 def _hold_device_hint() -> str:
     """Primer teclado legible, o el motivo por el que no se puede abrir."""
     try:
@@ -775,6 +831,19 @@ def cmd_doctor(args):
         readable = not device.startswith(("sin permiso", "falta", "ningún"))
         failures += not _check(readable, "Teclado evdev", device,
                                "Sin lectura de /dev/input no hay hold", warn=True)
+        if readable and cfg.hold_devices:
+            from .hotkey_hold import device_matches
+
+            try:
+                boards = [name for name, _ in _list_keyboards()]
+            except Exception:
+                boards = []
+            matched = [n for n in boards if device_matches(n, cfg.hold_devices)]
+            failures += not _check(
+                bool(matched), "Allowlist",
+                f"{len(matched)}/{len(boards)} teclados coinciden",
+                f"Ninguno coincide con {cfg.hold_devices}; revisa: local-stt keyboards",
+            )
         if not cfg.hold_devices:
             _check(True, "Allowlist", "vacía: escucha todos los teclados",
                    "Considera hold_devices = [\"tu teclado\"] (ver README)")
@@ -880,6 +949,9 @@ def main():
 
     dev = sub.add_parser("devices", help="Lista micrófonos")
     dev.set_defaults(func=cmd_devices)
+
+    kb = sub.add_parser("keyboards", help="Lista teclados para push-to-talk (hold_devices)")
+    kb.set_defaults(func=cmd_keyboards)
 
     h = sub.add_parser("history", help="Últimas transcripciones")
     h.add_argument("--count", "-n", type=int, default=10, help="Cuántas mostrar (default 10)")

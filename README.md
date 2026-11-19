@@ -119,6 +119,7 @@ auto-pasted with `Ctrl+V` where your cursor was.
 | **Hold `Win+F`** (if push-to-talk is on) | Records while held; releasing transcribes. A quick tap behaves like the normal toggle |
 | **`local-stt translate`** | Toggle: dictate in your language, the output is pasted in English |
 | **`local-stt config`** | Interactive menu for every setting (Enter keeps each value) |
+| **`local-stt keyboards`** | Lists readable keyboards and marks which ones your `hold_devices` allowlist matches |
 | **`local-stt reload`** | Applies config changes instantly (no restart, no VRAM loss) |
 | **`local-stt doctor`** | Diagnoses GPU, CUDA, daemon, hotkeys, clipboard tools, mic |
 
@@ -155,6 +156,8 @@ How it works and what to expect:
   going and the next tap stops it.
 - If `evdev` is missing or the user cannot read `/dev/input`, the daemon keeps
   working in toggle mode and `local-stt doctor` says exactly what is missing.
+- `local-stt keyboards` lists the readable keyboards and marks which ones the
+  `hold_devices` allowlist matches, so you can copy the exact substring.
 
 > [!WARNING]
 > Membership in the `input` group lets a process read **every** keystroke,
