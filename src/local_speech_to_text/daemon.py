@@ -595,7 +595,11 @@ class Daemon:
         if data == "status":
             state = "recording" if self.recorder.is_recording else "idle"
             origin = self._recording_origin or "-"
-            return f"{state} origin={origin} hold={self.hold_status}"
+            wake = "off"
+            if self.config.wake_word:
+                phrase = self.config.wake_word_phrase.split("|")[0]
+                wake = f"{self.config.wake_word_engine}:{phrase}"
+            return f"{state} origin={origin} hold={self.hold_status} wake={wake}"
         if data == "level":
             return self._level_payload()
         return "unknown"

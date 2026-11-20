@@ -55,6 +55,61 @@ def test_vosk_model_url():
         wakeword.vosk_model_url("fr")
 
 
+def test_aliases_y_gramatica():
+    assert wakeword.parse_aliases("dev paul | devpaul|dev paul") == ["dev paul", "devpaul"]
+    assert wakeword.phrase_in_text("dev paul|devpaul", "DevPaul, hola") is True
+    grammar = wakeword.vosk_grammar("dev paul|hey dev")
+    assert '"dev paul"' in grammar and '"hey dev"' in grammar and "[unk]" in grammar
+
+
+def test_phrase_warning_frases_cortas():
+    assert wakeword.phrase_warning("dev paul") is None
+    assert wakeword.phrase_warning("dev paul|devpaul") is None
+    assert "corta" in wakeword.phrase_warning("dev")
+    assert "vacía" in wakeword.phrase_warning("|")
+
+
+def test_safe_extract_rechaza_zip_slip(tmp_path):
+    bad = tmp_path / "bad.zip"
+    with __import__("zipfile").ZipFile(bad, "w") as zf:
+        zf.writestr("../evil.txt", "x")
+    with pytest.raises(ValueError):
+        wakeword._safe_extract(bad, tmp_path / "dest")
+
+
+def test_download_vosk_hash_incorrecto(monkeypatch, tmp_path):
+    import io
+    import zipfile
+
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as zf:
+        zf.writestr("vosk-model-small-en-us-0.15/README", "ok")
+    payload = buf.getvalue()
+    monkeypatch.setattr(wakeword.urllib.request, "urlopen", lambda url, timeout=0: io.BytesIO(payload))
+    monkeypatch.setitem(wakeword.VOSK_SHA256, "vosk-model-small-en-us-0.15", "0" * 64)
+
+    with pytest.raises(ValueError, match="sha256"):
+        wakeword.download_vosk_model("en", dest_dir=tmp_path)
+
+
+def test_download_vosk_hash_correcto_extrae(monkeypatch, tmp_path):
+    import hashlib
+    import io
+    import zipfile
+
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as zf:
+        zf.writestr("vosk-model-small-en-us-0.15/README", "ok")
+    payload = buf.getvalue()
+    digest = hashlib.sha256(payload).hexdigest()
+    monkeypatch.setattr(wakeword.urllib.request, "urlopen", lambda url, timeout=0: io.BytesIO(payload))
+    monkeypatch.setitem(wakeword.VOSK_SHA256, "vosk-model-small-en-us-0.15", digest)
+
+    target = wakeword.download_vosk_model("en", dest_dir=tmp_path)
+
+    assert (target / "README").read_text() == "ok"
+
+
 def test_find_vosk_model_explicito(tmp_path):
     assert wakeword.find_vosk_model(str(tmp_path)) == tmp_path
     assert wakeword.find_vosk_model(str(tmp_path / "nope")) is None

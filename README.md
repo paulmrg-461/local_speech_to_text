@@ -332,11 +332,11 @@ local-stt wakeword --download-vosk --vosk-lang en       # es for Spanish (~40 MB
 ```toml
 wake_word = true
 wake_word_engine = "vosk"
-wake_word_phrase = "dev paul"     # say "DevPaul"; es: "oye computadora"
-# vosk_model_path = ""            # autodetecta ~/.local/share/local-stt/vosk-model-*
+wake_word_phrase = "dev paul|devpaul"   # variants separated by |; es: "oye computadora"
+# vosk_model_path = ""                  # autodetecta ~/.local/share/local-stt/vosk-model-*
 ```
 
-`local-stt wakeword` verifies deps/model/phrase and `--check` is script-friendly. Vosk decodes only the phrase (plus `[unk]`), which keeps CPU low but can produce false positives with short phrases; use two words or a distinctive name.
+`local-stt wakeword` verifies deps/model/phrase and `--check` is script-friendly. Vosk decodes only the phrase (plus `[unk]`), which keeps CPU low but can produce false positives with short phrases; use two words or a distinctive name. Single-word phrases are flagged by `doctor`/`setup`.
 
 ---
 
@@ -369,6 +369,8 @@ partial_interval = 1.5     # seconds between partials
 # hold_min_ms = 200        # shorter = first toggle
 # hold_devices = ["AT Translated"]   # [] = every keyboard
 # wake_word = false        # hands-free ("hey jarvis") — see above
+# wake_word_engine = "openwakeword"   # "vosk" para frase propia ("dev paul")
+# wake_word_phrase = "dev paul|devpaul"
 ```
 
 Environment equivalents: `LOCAL_STT_MODEL`, `LOCAL_STT_LANG`, `LOCAL_STT_DEVICE`, `LOCAL_STT_COMPUTE`, `LOCAL_STT_BEAM`, `LOCAL_STT_MAX_SECS`, `LOCAL_STT_AUTO_PASTE`, `LOCAL_STT_DICTATION_COMMANDS`, `LOCAL_STT_SILENCE_STOP`, `LOCAL_STT_SILENCE_MS`, `LOCAL_STT_VAD`, `LOCAL_STT_VOCAB`, `LOCAL_STT_CORRECTIONS`, `LOCAL_STT_OVERLAY`, `LOCAL_STT_OSD_BACKEND`, `LOCAL_STT_OSD_MARGIN`, `LOCAL_STT_PARTIAL`, `LOCAL_STT_PARTIAL_SECS`, `LOCAL_STT_WAKE_WORD`, `LOCAL_STT_WAKE_MODEL`, `LOCAL_STT_WAKE_THRESHOLD`, `LOCAL_STT_WAKE_ENGINE`, `LOCAL_STT_WAKE_PHRASE`, `LOCAL_STT_VOSK_MODEL`, `LOCAL_STT_PUSH_TO_TALK`, `LOCAL_STT_HOLD_KEY`, `LOCAL_STT_HOLD_MIN_MS`, `LOCAL_STT_HOLD_DEVICES`.
@@ -403,7 +405,7 @@ Win+F (khotkeys / gsettings shortcut)
             ├─ corrections     (word-boundary replacements from corrections.txt)
             ├─ History         (~/.local/share/local-stt/history.jsonl, last 100)
             └─ wl-copy / xclip + notify-send + wtype Ctrl+V (auto-paste)
-Wake word monitor (optional) — always-on CPU stream → "hey jarvis" → starts recording
+Wake word monitor (optional) — always-on CPU stream → "hey jarvis" (openWakeWord) o tu frase (Vosk) → starts recording
 ```
 
 - The **daemon** loads the model once and keeps it in VRAM: startup ~10s (once per login), then each transcription takes well under a second.
@@ -441,6 +443,12 @@ Wake word monitor (optional) — always-on CPU stream → "hey jarvis" → start
 - Speak closer to the mic; check input level in `pavucontrol`.
 - Mixed languages? Set `language = "auto"` (or `"en"`).
 - Test the model directly: `local-stt transcribe yourfile.wav`.
+
+**Wake word doesn't fire**
+- `local-stt wakeword --check` must exit 0 (deps, model and phrase for the selected engine).
+- Vosk: speak exactly one of the configured variants (`wake_word_phrase = "dev paul|devpaul"`); check `journalctl --user -u local-stt -f | grep wakeword`.
+- Wrong language/model? Download the Spanish model (`--vosk-lang es`) and set a Spanish phrase; English model for "DevPaul".
+- Single-word phrases cause false positives; two words or a distinctive name work better.
 
 **One-command diagnosis**
 - `local-stt doctor` — checks GPU driver, CUDA, cuBLAS, daemon, model cache, hotkey, clipboard tools and microphone, and tells you exactly what to fix.

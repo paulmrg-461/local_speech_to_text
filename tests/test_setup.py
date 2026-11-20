@@ -11,6 +11,23 @@ def test_cheatsheet_menciona_lo_esencial():
     assert "hey jarvis" in cs
 
 
+def test_cheatsheet_muestra_la_frase_vosk(monkeypatch, tmp_path):
+    from dataclasses import replace
+    from pathlib import Path
+
+    from local_speech_to_text.config import Config
+
+    cfg = replace(
+        Config.load(config_file=Path("/no/existe.toml")),
+        wake_word_engine="vosk",
+        wake_word_phrase="dev paul|devpaul",
+        wake_word=True,
+    )
+    cs = _cheatsheet(cfg)
+    assert "dev paul" in cs
+    assert "hey jarvis" not in cs
+
+
 def test_check_system_deps_todo_instalado(monkeypatch, capsys):
     monkeypatch.setattr("shutil.which", lambda c: True)
     assert _check_system_deps() is False

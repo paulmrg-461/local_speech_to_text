@@ -610,6 +610,21 @@ def cmd_setup(args):
     except Exception as e:
         print(f"   ⚠️  no se pudo descargar ahora ({e}); se bajará al primer dictado")
 
+    if cfg.wake_word and cfg.wake_word_engine == "vosk":
+        from .wakeword import find_vosk_model, phrase_warning
+
+        if find_vosk_model(cfg.vosk_model_path) is None:
+            try:
+                import vosk  # noqa: F401
+            except ImportError:
+                print("   ⚠️  wake word vosk activo pero falta python-vosk")
+                print("      .venv/bin/pip install 'local-speech-to-text[vosk]'")
+            else:
+                print("   ⚠️  modelo Vosk no descargado: local-stt wakeword --download-vosk")
+        warn = phrase_warning(cfg.wake_word_phrase)
+        if warn:
+            print(f"   ⚠️  {warn}")
+
     # 3) atajos de teclado
     print("\n[3/5] Atajos (Win+F dictar, Win+Shift+F historial)")
     hotkey = _hotkey_script()
@@ -675,17 +690,21 @@ def cmd_setup(args):
     else:
         print("  Chuleta (arriba tienes lo que falta por resolver):")
     print("=" * 62)
-    print(_cheatsheet())
+    print(_cheatsheet(cfg))
 
 
-def _cheatsheet() -> str:
-    return """
+def _cheatsheet(cfg=None) -> str:
+    if cfg is not None and getattr(cfg, "wake_word_engine", "") == "vosk":
+        wake = f'MANOS LIBRES    di "{cfg.wake_word_phrase.split("|")[0]}" (vosk)'
+    else:
+        wake = 'MANOS LIBRES    di "hey jarvis" (wake_word = true en config.toml)'
+    return f"""
   DICTAR          Win+F ... habla ... Win+F   → copia y pega (Ctrl+V)
   HISTORIAL       Win+Shift+F  → elige un dictado anterior (wofi)
   TRADUCIR        local-stt translate (alterna: dicta español → pega inglés)
   CONFIG          local-stt config   → menú interactivo
   RECARGAR        local-stt reload   → aplica cambios sin reiniciar
-  MANOS LIBRES    di "hey jarvis" (wake_word = true en config.toml)
+  {wake}
   DIAGNÓSTICO     local-stt doctor
 
   Dictado con puntuación hablada:
@@ -964,15 +983,48 @@ def cmd_doctor(args):
            "")  # siempre OK: es opcional
     _check(True, "Correcciones", f"{n_corr} reglas en {cfg.corrections_file}", "")
 
-    # 5c. Wake word (opcional)
-    try:
-        import openwakeword  # noqa: F401
-        import onnxruntime  # noqa: F401
+    # 5c. Wake word (opcional, según motor)
+    from .wakeword import find_vosk_model, phrase_warning
 
-        _check(True, "Wake word", f"deps OK (modelo {cfg.wake_word_model})" +
-               (", ACTIVO" if cfg.wake_word else ", apagado (wake_word = true para activar)"), "")
-    except ImportError:
-        _check(False, "Wake word", "", "Opcional. Instala: .venv/bin/pip install 'local-speech-to-text[wakeword]'", warn=True)
+    if not cfg.wake_word:
+        _check(True, "Wake word", f"apagado (motor {cfg.wake_word_engine})", "")
+    elif cfg.wake_word_engine == "vosk":
+        try:
+            import vosk  # noqa: F401
+
+            deps = True
+        except ImportError:
+            deps = False
+        model = find_vosk_model(cfg.vosk_model_path)
+        failures += not _check(
+            deps and model is not None, "Wake word",
+            f"vosk · '{cfg.wake_word_phrase}'",
+            "Instala el extra [vosk] y ejecuta: local-stt wakeword --download-vosk",
+        )
+        if model is not None:
+            _check(True, "Modelo Vosk", str(model), "")
+        warn = phrase_warning(cfg.wake_word_phrase)
+        if warn:
+            _check(False, "Frase wake word", warn,
+                   "Frases cortas generan falsos positivos (usa 2+ palabras)", warn=True)
+    else:
+        try:
+            import openwakeword  # noqa: F401
+            import onnxruntime  # noqa: F401
+
+            from .wakeword import resolve_model_path
+
+            path = resolve_model_path(cfg.wake_word_model)
+            exists = path.endswith(".onnx") and Path(path).exists()
+            failures += not _check(
+                exists, "Wake word", f"openwakeword · {cfg.wake_word_model}",
+                "Modelo no encontrado: revisa wake_word_model o reinstala el extra [wakeword]",
+            )
+        except ImportError:
+            failures += not _check(
+                False, "Wake word", "",
+                "Instala: .venv/bin/pip install 'local-speech-to-text[wakeword]'",
+            )
 
     # 5d. Push-to-talk (opcional: mantener la tecla para dictar)
     if not cfg.push_to_talk:

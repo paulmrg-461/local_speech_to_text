@@ -12,7 +12,16 @@ El proyecto sigue [SemVer](https://semver.org/lang/es/) de forma pragmática:
 - **Wake word con frase propia sin entrenar**: motor Vosk
   (`wake_word_engine = "vosk"`, `wake_word_phrase = "dev paul"`,
   `--download-vosk`, `wake_word_phrase = "oye computadora"` en español). CPU,
-  gramática limitada a la frase; opt-in con extra `[vosk]`.
+  gramática limitada a la frase; opt-in con extra `[vosk]`. Acepta alias
+  (`"dev paul|devpaul"`) y avisa de frases de una sola palabra.
+
+### Corregido
+- `doctor` valida el motor de wake word real (Vosk u openWakeWord), el modelo,
+  la frase y los alias; la chuleta y `status` muestran motor/frase.
+- Descarga de Vosk: sha256 fijado por modelo y extracción que rechaza rutas
+  fuera del destino (zip-slip).
+- `setup` avisa si el motor Vosk está activo sin dependencias/modelo y de
+  frases demasiado cortas.
 
 ## [0.3.0] - 2026-11-19
 

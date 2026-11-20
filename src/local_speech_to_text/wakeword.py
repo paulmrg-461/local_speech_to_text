@@ -30,10 +30,34 @@ def normalize_phrase(text: str) -> str:
 
 
 def phrase_in_text(phrase: str, text: str) -> bool:
-    """True si la frase aparece como palabras completas (no substring)."""
-    p = normalize_phrase(phrase)
+    """True si alguna variante (separadas por `|`) aparece como palabras."""
     t = normalize_phrase(text)
-    return bool(p) and f" {p} " in f" {t} "
+    return any(f" {alias} " in f" {t} " for alias in parse_aliases(phrase))
+
+
+def parse_aliases(phrase: str) -> list[str]:
+    """'dev paul|devpaul' -> ['dev paul', 'devpaul'] (normalizado, sin dupes)."""
+    aliases: list[str] = []
+    for part in (phrase or "").split("|"):
+        norm = normalize_phrase(part)
+        if norm and norm not in aliases:
+            aliases.append(norm)
+    return aliases
+
+
+def phrase_warning(phrase: str, min_words: int = 2) -> str | None:
+    """Aviso si todas las variantes son demasiado cortas (falsos positivos)."""
+    aliases = parse_aliases(phrase)
+    if not aliases:
+        return "frase vacía: configura wake_word_phrase"
+    if all(len(alias.split()) < min_words for alias in aliases):
+        return f"frase corta ({aliases[0]!r}): usa 2+ palabras o alias con |"
+    return None
+
+
+def vosk_grammar(phrase: str) -> str:
+    """Gramática de Vosk: cada alias como frase + [unk]."""
+    return json.dumps([*parse_aliases(phrase), "[unk]"])
 
 
 # Vosk: keyword spotting por gramática, sin entrenar modelo (CPU).
@@ -42,6 +66,26 @@ VOSK_MODELS = {
     "es": "vosk-model-small-es-0.42",
 }
 VOSK_URL = "https://alphacephei.com/vosk/models/{name}.zip"
+# sha256 de los zips oficiales; si falta, se avisa y se omite la verificación.
+VOSK_SHA256: dict[str, str] = {}
+
+
+def _sha256(path: Path) -> str:
+    import hashlib
+
+    with path.open("rb") as fh:
+        return hashlib.file_digest(fh, "sha256").hexdigest()
+
+
+def _safe_extract(zip_path: Path, dest: Path) -> None:
+    """Extrae validando que ninguna entrada escape del directorio destino."""
+    base = dest.resolve()
+    with zipfile.ZipFile(zip_path) as zf:
+        for member in zf.infolist():
+            target = (base / member.filename).resolve()
+            if not target.is_relative_to(base):
+                raise ValueError(f"entrada insegura en el zip: {member.filename}")
+        zf.extractall(dest)
 
 
 def vosk_model_url(lang: str) -> tuple[str, str]:
@@ -83,8 +127,12 @@ def download_vosk_model(lang: str = "en", dest_dir: Path | None = None) -> Path:
             with tempfile.NamedTemporaryFile(suffix=".zip", delete=False) as tmp:
                 zip_path = Path(tmp.name)
                 shutil.copyfileobj(resp, tmp)
-        with zipfile.ZipFile(zip_path) as zf:
-            zf.extractall(base)
+        expected = VOSK_SHA256.get(name)
+        if expected and _sha256(zip_path) != expected:
+            raise ValueError(f"sha256 no coincide para {name}; descarga corrupta o alterada")
+        if not expected:
+            print(f"[wakeword] aviso: sin sha256 fijado para {name}")
+        _safe_extract(zip_path, base)
     finally:
         if zip_path is not None:
             zip_path.unlink(missing_ok=True)
@@ -249,8 +297,7 @@ class VoskMonitor:
         if hasattr(vosk, "SetLogLevel"):
             vosk.SetLogLevel(-1)  # sin el ruido de logs de Kaldi
         model = vosk.Model(self._model_path)
-        grammar = json.dumps([self._phrase, "[unk]"])
-        self._rec = vosk.KaldiRecognizer(model, self._sample_rate, grammar)
+        self._rec = vosk.KaldiRecognizer(model, self._sample_rate, vosk_grammar(self._phrase))
 
     def _handle_text(self, text: str) -> bool:
         """True si el texto contiene la frase y no estamos silenciados."""

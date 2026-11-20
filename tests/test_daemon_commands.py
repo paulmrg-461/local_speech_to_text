@@ -29,6 +29,7 @@ def _daemon(tmp_path) -> Daemon:
     d._recording_origin = None
     d.hold_status = "off"
     d.hold_listener = None
+    d.config = Config.load(config_file=Path("/no/existe.toml"))
     d._partial_text = ""
     d._sock_path = tmp_path / "local-stt.sock"
     d.calls: list[str] = []
@@ -97,9 +98,9 @@ def test_status_incluye_hold_y_origen(tmp_path):
     d = _daemon(tmp_path)
     d.hold_status = "running"
     d.start_recording("hold")
-    assert d._handle_command("status") == "recording origin=hold hold=running"
+    assert d._handle_command("status") == "recording origin=hold hold=running wake=off"
     d.stop_recording()
-    assert d._handle_command("status") == "idle origin=- hold=running"
+    assert d._handle_command("status") == "idle origin=- hold=running wake=off"
 
 
 def test_level_incluye_hold(tmp_path):
