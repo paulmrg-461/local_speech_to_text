@@ -67,7 +67,10 @@ VOSK_MODELS = {
 }
 VOSK_URL = "https://alphacephei.com/vosk/models/{name}.zip"
 # sha256 de los zips oficiales; si falta, se avisa y se omite la verificación.
-VOSK_SHA256: dict[str, str] = {}
+VOSK_SHA256: dict[str, str] = {
+    "vosk-model-small-en-us-0.15": "30f26242c4eb449f948e42cb302dd7a686cb29a3423a8367f99ff41780942498",
+    "vosk-model-small-es-0.42": "09b239888f633ef2f0b4e09736e3d9936acfd810bc65d53fad45261762c6511f",
+}
 
 
 def _sha256(path: Path) -> str:

@@ -92,6 +92,12 @@ def test_download_vosk_hash_incorrecto(monkeypatch, tmp_path):
         wakeword.download_vosk_model("en", dest_dir=tmp_path)
 
 
+def test_hashes_fijados_para_todos_los_modelos():
+    for name in wakeword.VOSK_MODELS.values():
+        digest = wakeword.VOSK_SHA256.get(name)
+        assert digest is not None and len(digest) == 64
+
+
 def test_download_vosk_hash_correcto_extrae(monkeypatch, tmp_path):
     import hashlib
     import io
