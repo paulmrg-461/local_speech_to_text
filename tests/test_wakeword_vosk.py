@@ -69,6 +69,13 @@ def test_phrase_warning_frases_cortas():
     assert "vacía" in wakeword.phrase_warning("|")
 
 
+def test_filter_known_aliases():
+    vocab = {"dev", "paul"}
+    aliases = ["dev paul", "devpaul"]
+    assert wakeword.filter_known_aliases(aliases, lambda w: w in vocab) == ["dev paul"]
+    assert wakeword.filter_known_aliases(aliases, lambda w: True) == aliases
+
+
 def test_safe_extract_rechaza_zip_slip(tmp_path):
     bad = tmp_path / "bad.zip"
     with __import__("zipfile").ZipFile(bad, "w") as zf:
@@ -142,6 +149,12 @@ def test_vosk_monitor_handle_text_dispara_una_vez():
     monitor.resume()
     assert monitor._handle_text("Dev Paul") is True
     assert calls == [1, 1]
+
+
+def test_vosk_monitor_conserva_alias_con_pipe():
+    monitor = wakeword.VoskMonitor(lambda: None, model_path="/tmp/x", phrase="dev paul|devpaul")
+    assert monitor._aliases == ["dev paul", "devpaul"]
+    assert monitor._handle_text("DevPaul") is True
 
 
 def test_vosk_monitor_start_sin_modelo_no_explota(capsys):

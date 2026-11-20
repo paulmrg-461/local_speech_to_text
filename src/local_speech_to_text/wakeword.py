@@ -60,6 +60,11 @@ def vosk_grammar(phrase: str) -> str:
     return json.dumps([*parse_aliases(phrase), "[unk]"])
 
 
+def filter_known_aliases(aliases: list[str], is_word) -> list[str]:
+    """Deja solo variantes cuyas palabras existen en el vocabulario."""
+    return [alias for alias in aliases if all(is_word(word) for word in alias.split())]
+
+
 # Vosk: keyword spotting por gramática, sin entrenar modelo (CPU).
 VOSK_MODELS = {
     "en": "vosk-model-small-en-us-0.15",
@@ -280,7 +285,8 @@ class VoskMonitor:
     def __init__(self, on_wake, model_path: str, phrase: str = "dev paul", sample_rate: int = 16000):
         self._on_wake = on_wake
         self._model_path = str(model_path)
-        self._phrase = normalize_phrase(phrase) or "dev paul"
+        self._phrase = (phrase or "").strip() or "dev paul"
+        self._aliases = parse_aliases(self._phrase)
         self._sample_rate = sample_rate
         self._muted = threading.Event()
         self._stop_flag = threading.Event()
@@ -300,11 +306,25 @@ class VoskMonitor:
         if hasattr(vosk, "SetLogLevel"):
             vosk.SetLogLevel(-1)  # sin el ruido de logs de Kaldi
         model = vosk.Model(self._model_path)
-        self._rec = vosk.KaldiRecognizer(model, self._sample_rate, vosk_grammar(self._phrase))
+        finder = getattr(model, "vosk_model_find_word", None)
+        aliases = parse_aliases(self._phrase)
+        if finder is not None:
+            known = filter_known_aliases(aliases, lambda word: finder(word) >= 0)
+            if known:
+                aliases = known
+            else:
+                print(f"[wakeword] aviso: ninguna variante de '{self._phrase}' está en el vocabulario")
+        self._aliases = aliases
+        self._rec = vosk.KaldiRecognizer(
+            model, self._sample_rate, json.dumps([*aliases, "[unk]"])
+        )
 
     def _handle_text(self, text: str) -> bool:
         """True si el texto contiene la frase y no estamos silenciados."""
-        if self._muted.is_set() or not phrase_in_text(self._phrase, text):
+        if self._muted.is_set():
+            return False
+        normalized = f" {normalize_phrase(text)} "
+        if not any(f" {alias} " in normalized for alias in self._aliases):
             return False
         print(f"[wakeword] frase detectada: '{self._phrase}'")
         self._muted.set()  # evita re-disparos hasta resume()
@@ -322,7 +342,7 @@ class VoskMonitor:
             blocksize=_CHUNK, callback=_callback,
         )
         self._stream.start()
-        print(f"[wakeword] escuchando (vosk): '{self._phrase}'")
+        print(f"[wakeword] escuchando (vosk): '{' | '.join(self._aliases)}'")
         while not self._stop_flag.is_set():
             try:
                 chunk = self._queue.get(timeout=0.2)
