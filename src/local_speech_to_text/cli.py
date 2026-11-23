@@ -240,6 +240,37 @@ def cmd_history(args):
         print(f"#{i:<3} {e['ts']}  {e['text'][:100]}")
 
 
+def cmd_llm(args):
+    """Estado del post-proceso LLM local y prueba manual."""
+    import time
+
+    from .llm import is_local_url, llm_status, postprocess
+
+    cfg = _config_from_args(args)
+    ok, reason, models = llm_status(cfg.llm_url, cfg.llm_model)
+    print(f"post_process: {cfg.post_process} · estilo: {cfg.llm_style} · modelo: {cfg.llm_model}")
+    print(f"url: {cfg.llm_url}" + ("" if is_local_url(cfg.llm_url) else "  ⚠️ no local (privacidad)"))
+    print(f"ollama: {reason}")
+    if models:
+        print("modelos: " + ", ".join(models))
+
+    test = getattr(args, "test", None)
+    if test:
+        if not ok:
+            print("❌ no puedo probar el LLM: corrige lo anterior")
+            sys.exit(1)
+        t0 = time.time()
+        mode = cfg.post_process if cfg.post_process != "off" else "format"
+        out = postprocess(
+            test, mode=mode, model=cfg.llm_model, url=cfg.llm_url,
+            timeout=cfg.llm_timeout, style=cfg.llm_style,
+            target_lang=cfg.llm_target_lang,
+        )
+        print(f"→ {out}  ({time.time() - t0:.2f}s)")
+    if getattr(args, "check", False):
+        sys.exit(0 if (ok or cfg.post_process == "off") else 1)
+
+
 def cmd_wakeword(args):
     """Estado del wake word (openWakeWord o Vosk), modelos y descarga."""
     from .wakeword import (
@@ -1077,6 +1108,19 @@ def cmd_doctor(args):
     else:
         _check(True, "OSD", osd_line, "")
 
+    # 5f. Post-proceso LLM (opcional)
+    from .llm import is_local_url, llm_status
+
+    if cfg.post_process == "off":
+        _check(True, "Post-proceso LLM", "off", "")
+    else:
+        ok_llm, why_llm, _ = llm_status(cfg.llm_url, cfg.llm_model)
+        failures += not _check(ok_llm, "Post-proceso LLM",
+                               f"{cfg.post_process} · {cfg.llm_model}", why_llm, warn=True)
+        if not is_local_url(cfg.llm_url):
+            _check(False, "LLM privacidad", cfg.llm_url,
+                   "La URL no es local: el texto saldría de tu equipo", warn=True)
+
     # 6. Atajo
     if cfg.push_to_talk:
         _check(True, "Atajo Win+F", f"gestionado por push-to-talk ({cfg.hold_key})", "")
@@ -1181,6 +1225,12 @@ def main(argv: list[str] | None = None):
     osd.add_argument("--seconds", type=float, default=6.0,
                      help="Duración de la vista previa (default 6s)")
     osd.set_defaults(func=cmd_osd)
+
+    llm = sub.add_parser("llm", help="Estado del post-proceso LLM local (Ollama)")
+    llm.add_argument("--check", action="store_true",
+                     help="exit 1 si post_process está activo y el LLM no está disponible")
+    llm.add_argument("--test", metavar="TEXTO", help="Prueba el modelo con ese texto")
+    llm.set_defaults(func=cmd_llm)
 
     q = sub.add_parser("stop", help="Detiene el daemon")
     q.set_defaults(func=cmd_stop)

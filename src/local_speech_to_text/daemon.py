@@ -453,6 +453,7 @@ class Daemon:
             text = apply_corrections(text, self.corrections)
         if getattr(self.config, "numbers_to_digits", False):
             text = numbers_to_digits(text)
+        text = self._apply_llm(text)
         print(f"[daemon] Transcrito en {time.time() - t0:.2f}s")
 
         if not text.strip():
@@ -476,6 +477,26 @@ class Daemon:
                 print("[daemon] Auto-paste enviado (Ctrl+V)")
             else:
                 print("[daemon] Haz Ctrl+V para pegar")
+
+    def _apply_llm(self, text: str) -> str:
+        """Post-proceso opcional; el LLM nunca puede romper el dictado."""
+        mode = getattr(self.config, "post_process", "off")
+        if mode == "off" or not text.strip():
+            return text
+        from .llm import postprocess
+
+        t0 = time.time()
+        out = postprocess(
+            text,
+            mode=mode,
+            model=self.config.llm_model,
+            url=self.config.llm_url,
+            timeout=self.config.llm_timeout,
+            style=self.config.llm_style,
+            target_lang=self.config.llm_target_lang,
+        )
+        print(f"[daemon] LLM {mode} en {time.time() - t0:.2f}s")
+        return out
 
     def _final_transcription(self, recording) -> str:
         """Texto final: cola pendiente si hubo streaming; paso completo si fue corto."""

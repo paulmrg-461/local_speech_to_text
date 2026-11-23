@@ -41,6 +41,12 @@ _MENU = [
     ("wake_word_engine", "Motor wake word", "choice", ["openwakeword", "vosk"]),
     ("wake_word_phrase", "Frase wake word (vosk)", "str", None),
     ("vosk_model_path", "Modelo Vosk (vacío=auto)", "str", None),
+    ("post_process", "Post-proceso LLM", "choice", ["off", "format", "translate"]),
+    ("llm_model", "Modelo Ollama", "str", None),
+    ("llm_url", "URL de Ollama", "str", None),
+    ("llm_timeout", "Timeout LLM (s)", "float", None),
+    ("llm_style", "Estilo (format)", "choice", ["clean", "email", "chat", "code"]),
+    ("llm_target_lang", "Idioma destino (translate)", "str", None),
     ("push_to_talk", "Push-to-talk (mantener tecla)", "bool", None),
     ("hold_key", "Tecla hold (super+f)", "str", None),
     ("hold_min_ms", "Tap mínimo para hold (ms)", "int", None),
@@ -97,6 +103,9 @@ def _ask(label: str, kind: str, current, options: list | None):
     if kind == "int":
         new = input(f"{label} [{current}] (Enter=keep): ").strip()
         return current if new == "" else int(new)
+    if kind == "float":
+        new = input(f"{label} [{current}] (Enter=keep): ").strip()
+        return current if new == "" else float(new)
     if kind == "choice":
         opts = options or []
         print(f"{label}: " + " | ".join(f"{i}:{o}" for i, o in enumerate(opts)))

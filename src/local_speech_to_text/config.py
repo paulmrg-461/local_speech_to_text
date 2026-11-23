@@ -51,6 +51,13 @@ _ENV_MAP = {
     "wake_word_engine": "LOCAL_STT_WAKE_ENGINE",
     "wake_word_phrase": "LOCAL_STT_WAKE_PHRASE",
     "vosk_model_path": "LOCAL_STT_VOSK_MODEL",
+    # post-proceso con LLM local
+    "post_process": "LOCAL_STT_POST_PROCESS",
+    "llm_model": "LOCAL_STT_LLM_MODEL",
+    "llm_url": "LOCAL_STT_LLM_URL",
+    "llm_timeout": "LOCAL_STT_LLM_TIMEOUT",
+    "llm_style": "LOCAL_STT_LLM_STYLE",
+    "llm_target_lang": "LOCAL_STT_LLM_LANG",
     "numbers_to_digits": "LOCAL_STT_NUMBERS",
     "streaming": "LOCAL_STT_STREAMING",
     "stream_window": "LOCAL_STT_STREAM_WINDOW",
@@ -89,6 +96,13 @@ _DEFAULTS = {
     "wake_word_engine": "openwakeword",  # openwakeword | vosk (frase propia)
     "wake_word_phrase": "dev paul",  # solo vosk
     "vosk_model_path": "",  # vacío = ~/.local/share/local-stt/vosk-model-*
+    # Post-proceso opcional con LLM local (Ollama)
+    "post_process": "off",  # off | format | translate
+    "llm_model": "gemma4:e4b",
+    "llm_url": "http://127.0.0.1:11434",
+    "llm_timeout": 6.0,
+    "llm_style": "clean",  # clean | email | chat | code
+    "llm_target_lang": "español",
     "numbers_to_digits": False,  # true: "tres coma catorce" -> 3,14 (opinional, ver README)
     "streaming": True,  # dictados largos: confirma ventanas y solo transcribe la cola
     "stream_window": 12.0,  # segundos por ventana confirmada
@@ -152,6 +166,12 @@ class Config:
     wake_word_engine: str = "openwakeword"  # openwakeword | vosk
     wake_word_phrase: str = "dev paul"  # frase para vosk
     vosk_model_path: str = ""  # vacío = autodetecta vosk-model-*
+    post_process: str = "off"  # off | format | translate (LLM local)
+    llm_model: str = "gemma4:e4b"
+    llm_url: str = "http://127.0.0.1:11434"
+    llm_timeout: float = 6.0
+    llm_style: str = "clean"  # clean | email | chat | code
+    llm_target_lang: str = "español"
     numbers_to_digits: bool = False
     streaming: bool = True  # dictados largos: confirma ventanas, al parar solo transcribe la cola
     stream_window: float = 12.0
@@ -211,6 +231,17 @@ class Config:
                 data[key] = str(data[key])
         if data.get("wake_word_engine") not in ("openwakeword", "vosk"):
             data["wake_word_engine"] = "openwakeword"
+        for key in ("post_process", "llm_model", "llm_url", "llm_style", "llm_target_lang"):
+            if data.get(key) is not None:
+                data[key] = str(data[key])
+        if data.get("post_process") not in ("off", "format", "translate"):
+            data["post_process"] = "off"
+        if data.get("llm_style") not in ("clean", "email", "chat", "code"):
+            data["llm_style"] = "clean"
+        try:
+            data["llm_timeout"] = max(0.5, float(data.get("llm_timeout", 6.0)))
+        except (TypeError, ValueError):
+            data["llm_timeout"] = 6.0
         return cls(**{k: v for k, v in data.items() if k in {f.name for f in fields(cls)}})
 
 
@@ -218,7 +249,8 @@ class Config:
 _STR_KEYS = {
     "language", "model", "device", "compute_type", "mic", "wake_word_model",
     "hold_key", "osd_backend", "osd_monitor", "wake_word_engine", "wake_word_phrase",
-    "vosk_model_path",
+    "vosk_model_path", "post_process", "llm_model", "llm_url", "llm_style",
+    "llm_target_lang",
 }
 
 
@@ -246,6 +278,8 @@ def _apply_env(data: dict) -> None:
             data[key] = float(raw)
         elif key == "stream_window":
             data[key] = float(raw)
+        elif key == "llm_timeout":
+            data[key] = max(0.5, float(raw))
         elif key in ("vocabulary_file", "corrections_file"):
             data[key] = Path(raw).expanduser()
         else:  # bools

@@ -14,6 +14,10 @@ El proyecto sigue [SemVer](https://semver.org/lang/es/) de forma pragmática:
   `--download-vosk`, `wake_word_phrase = "oye computadora"` en español). CPU,
   gramática limitada a la frase; opt-in con extra `[vosk]`. Acepta alias
   (`"dev paul|devpaul"`) y avisa de frases de una sola palabra.
+- **Post-proceso opcional con LLM local** (Ollama + Gemma 4):
+  `post_process = format|translate`, estilos clean/email/chat/code, timeout con
+  fallback al texto crudo, `local-stt llm` y comprobación en `doctor`. Sin
+  dependencias Python nuevas y solo `localhost`.
 
 ### Corregido
 - `doctor` valida el motor de wake word real (Vosk u openWakeWord), el modelo,

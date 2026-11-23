@@ -122,6 +122,7 @@ auto-pasted with `Ctrl+V` where your cursor was.
 | **`local-stt keyboards`** | Lists readable keyboards and marks which ones your `hold_devices` allowlist matches |
 | **`local-stt osd`** | Shows the OSD backend (GTK layer-shell or Tk), why it was chosen and how to enable the native one (`--check` for scripts) |
 | **`local-stt wakeword`** | Shows the active wake word, its resolved `.onnx` path and the bundled models |
+| **`local-stt llm`** | Shows the local LLM post-process status and models; `--test` runs a sample, `--check` is script-friendly |
 | **`local-stt reload`** | Applies config changes instantly (no restart, no VRAM loss) |
 | **`local-stt doctor`** | Diagnoses GPU, CUDA, daemon, hotkeys, clipboard tools, mic |
 
@@ -340,6 +341,31 @@ wake_word_phrase = "dev paul|devpaul"   # variants separated by |; es: "oye comp
 
 ---
 
+## Optional LLM post-processing (local, Gemma 4)
+
+Whisper is kept as the transcriber; an optional local LLM can **format** the result or **translate** it after dictation. No cloud, no new Python deps: it talks to [Ollama](https://ollama.com) over `127.0.0.1`.
+
+```bash
+ollama pull gemma4:e4b      # 6.6 GB; gemma4:e2b (4.6 GB) is the low-VRAM option
+local-stt llm               # status, models, URL
+local-stt llm --test "eh esto es una prueba o sea de formato"
+```
+
+```toml
+post_process = "off"          # off | format | translate
+llm_model = "gemma4:e4b"
+llm_url = "http://127.0.0.1:11434"
+llm_timeout = 6.0             # pasado esto se usa el texto crudo
+llm_style = "clean"           # clean | email | chat | code
+llm_target_lang = "español"   # solo translate
+```
+
+- **format**: punctuation cleanup, filler removal, email/chat/technical style.
+- **translate**: EN→ES locally (Whisper's `translate` only goes to English).
+- Fallback: any error, timeout or empty answer keeps the raw transcription; the dictation never fails because of the LLM.
+- Latency: ~0.1 s warm, ~3.5 s cold (first call loads the model); `keep_alive=5m`.
+- VRAM: E4B (6.6 GB) + Whisper (~3.7 GB) ≈ 10.3/12.2 GB; E2B fits with margin. `doctor` warns if Ollama/model/URL is wrong or not local.
+
 ## Configuration
 
 Edit `~/.config/local-stt/config.toml` (created by the installer) and run `local-stt reload`. **Environment variables always win over the TOML**, and CLI flags win over everything.
@@ -371,9 +397,13 @@ partial_interval = 1.5     # seconds between partials
 # wake_word = false        # hands-free ("hey jarvis") — see above
 # wake_word_engine = "openwakeword"   # "vosk" para frase propia ("dev paul")
 # wake_word_phrase = "dev paul|devpaul"
+# Post-proceso con LLM local (Ollama): off | format | translate
+# post_process = "off"
+# llm_model = "gemma4:e4b"           # o gemma4:e2b (menos VRAM)
+# llm_style = "clean"                # clean | email | chat | code
 ```
 
-Environment equivalents: `LOCAL_STT_MODEL`, `LOCAL_STT_LANG`, `LOCAL_STT_DEVICE`, `LOCAL_STT_COMPUTE`, `LOCAL_STT_BEAM`, `LOCAL_STT_MAX_SECS`, `LOCAL_STT_AUTO_PASTE`, `LOCAL_STT_DICTATION_COMMANDS`, `LOCAL_STT_SILENCE_STOP`, `LOCAL_STT_SILENCE_MS`, `LOCAL_STT_VAD`, `LOCAL_STT_VOCAB`, `LOCAL_STT_CORRECTIONS`, `LOCAL_STT_OVERLAY`, `LOCAL_STT_OSD_BACKEND`, `LOCAL_STT_OSD_MARGIN`, `LOCAL_STT_PARTIAL`, `LOCAL_STT_PARTIAL_SECS`, `LOCAL_STT_WAKE_WORD`, `LOCAL_STT_WAKE_MODEL`, `LOCAL_STT_WAKE_THRESHOLD`, `LOCAL_STT_WAKE_ENGINE`, `LOCAL_STT_WAKE_PHRASE`, `LOCAL_STT_VOSK_MODEL`, `LOCAL_STT_PUSH_TO_TALK`, `LOCAL_STT_HOLD_KEY`, `LOCAL_STT_HOLD_MIN_MS`, `LOCAL_STT_HOLD_DEVICES`.
+Environment equivalents: `LOCAL_STT_MODEL`, `LOCAL_STT_LANG`, `LOCAL_STT_DEVICE`, `LOCAL_STT_COMPUTE`, `LOCAL_STT_BEAM`, `LOCAL_STT_MAX_SECS`, `LOCAL_STT_AUTO_PASTE`, `LOCAL_STT_DICTATION_COMMANDS`, `LOCAL_STT_SILENCE_STOP`, `LOCAL_STT_SILENCE_MS`, `LOCAL_STT_VAD`, `LOCAL_STT_VOCAB`, `LOCAL_STT_CORRECTIONS`, `LOCAL_STT_OVERLAY`, `LOCAL_STT_OSD_BACKEND`, `LOCAL_STT_OSD_MARGIN`, `LOCAL_STT_PARTIAL`, `LOCAL_STT_PARTIAL_SECS`, `LOCAL_STT_WAKE_WORD`, `LOCAL_STT_WAKE_MODEL`, `LOCAL_STT_WAKE_THRESHOLD`, `LOCAL_STT_WAKE_ENGINE`, `LOCAL_STT_WAKE_PHRASE`, `LOCAL_STT_VOSK_MODEL`, `LOCAL_STT_POST_PROCESS`, `LOCAL_STT_LLM_MODEL`, `LOCAL_STT_LLM_URL`, `LOCAL_STT_LLM_TIMEOUT`, `LOCAL_STT_LLM_STYLE`, `LOCAL_STT_LLM_LANG`, `LOCAL_STT_PUSH_TO_TALK`, `LOCAL_STT_HOLD_KEY`, `LOCAL_STT_HOLD_MIN_MS`, `LOCAL_STT_HOLD_DEVICES`.
 
 ### Models & VRAM (RTX 5070 12GB)
 
