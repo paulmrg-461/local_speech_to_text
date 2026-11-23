@@ -4,7 +4,7 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/).
 El proyecto sigue [SemVer](https://semver.org/lang/es/) de forma pragmática:
 0.x = API de CLI/config todavía puede cambiar.
 
-## [Unreleased]
+## [0.4.0] - 2026-11-23
 
 ### Añadido
 - `local-stt wakeword`: modelo activo, ruta resuelta (nombre o `.onnx`
@@ -26,6 +26,8 @@ El proyecto sigue [SemVer](https://semver.org/lang/es/) de forma pragmática:
   fuera del destino (zip-slip).
 - `setup` avisa si el motor Vosk está activo sin dependencias/modelo y de
   frases demasiado cortas.
+- Vosk: los alias con `|` se parsean antes de normalizar y se filtran por el
+  vocabulario del modelo (evita el warning de Kaldi y falsos avisos).
 
 ## [0.3.0] - 2026-11-19
 

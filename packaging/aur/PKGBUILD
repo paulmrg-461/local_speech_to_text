@@ -2,7 +2,7 @@
 # local-stt: dictado local (faster-whisper + CUDA) para Wayland.
 # Build: makepkg -si  (requiere base-devel y las deps AUR)
 pkgname=local-stt
-pkgver=0.3.0
+pkgver=0.4.0
 pkgrel=1
 pkgdesc="Dictado local en Linux con faster-whisper/CUDA: Win+F para transcribir y copiar"
 arch=(x86_64)
